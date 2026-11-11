@@ -33,6 +33,16 @@ cp .env.example .env        # optional; the defaults work without it
 run `ollama pull <model>`, then restart the server. `OLLAMA_TIMEOUT` (seconds, default 120) covers the
 slow first call while the model loads.
 
+**Which model?** Measured with `tools/eval_words.py` (14 ambiguous English/German words), CPU only:
+
+| Model | Correct | Time per word (CPU) |
+| --- | --- | --- |
+| `qwen3:4b` (default) | 7/14 – German meanings are often wrong | ~10–14 s |
+| `qwen3:8b` (**recommended**, ~5 GB) | 13/14 | ~15–25 s |
+
+If your computer has a supported graphics card, Ollama uses it automatically and both are much faster.
+The dictionary part of a lookup appears after about 1–2 s either way; only the meaning takes this long.
+
 > Windows tip: if each lookup has an extra ~2 s delay, set `OLLAMA_BASE_URL=http://127.0.0.1:11434`.
 > `localhost` may try IPv6 first, and Ollama only listens on IPv4.
 
@@ -64,7 +74,9 @@ Open http://localhost:8000.
   The book's own colours are overridden in dark mode so the text is always readable.
 - **Navigation:** use the ‹ › buttons, the ← → keys, or the Contents menu.
 - **Look up a word:** click it. Close the popover with Esc or by clicking outside it.
-  The first lookup can take a while because the model has to load.
+  The base form, pronunciation and dictionary meanings appear first (1–2 s); the meaning in this sentence
+  and a translation of the whole sentence follow when the model is done. The model is loaded in the
+  background as soon as you open a book, so the first lookup doesn't also wait for that.
 - **Meaning in:** the selector in the toolbar sets the language of meanings and translations: Tiếng Việt
   (default), English or Deutsch. If it matches the book's language (e.g. a German book with meanings in
   Deutsch), you get a simpler synonym and an explanation in simple language instead of a translation.
@@ -118,10 +130,11 @@ server and counts how many Vietnamese answers contain an accepted keyword:
 
 ```bash
 python tools/eval_words.py                 # default http://127.0.0.1:8000
+python tools/eval_words.py -v              # also print the model's translation of each sentence
 ```
 
-Use it to compare models: change `OLLAMA_MODEL`, restart the server, run it again. With `qwen3:4b`, English
-is mostly right and German often isn't (about 7 of 14). See `docs/DEVLOG.md` for details.
+Use it to compare models: change `OLLAMA_MODEL`, restart the server, run it again (results above).
+See `docs/DEVLOG.md` for details.
 
 ## Troubleshooting
 

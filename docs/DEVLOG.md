@@ -398,6 +398,67 @@ existed since the beginning; the earlier tests only checked the section, not the
 
 ---
 
+## Part 10: Better and faster meanings
+
+### 32. Wrong base forms for irregular German verbs
+- **Problem:** *fing* (from *fangen*) was looked up as "fing" and translated as "ngón tay" (finger).
+  The same happened with *molk* (*melken*), *anfing* (*anfangen*) and *aß* (*essen*).
+- **Cause:** the small German spaCy model doesn't know many irregular forms and returns the word unchanged.
+- **Fix:** if spaCy returns the word unchanged, use the base form from `simplemma` (a small word-list
+  lemmatizer, new dependency). German only: for English, spaCy is good, and simplemma made "tired"
+  into "tire". Works for separable verbs too (*fing … an* → *anfangen*).
+  *File:* `backend/nlp.py` (`_base_form`)
+
+### 33. Sentence first, then the word
+- **Idea:** translating whole sentences had worked better than single words (Part 4). So the model now
+  writes a translation of the whole sentence first (`sentence`, the first key in the JSON schema, so it
+  really comes first) and then has to use the same word for `translation`. The popover shows that
+  sentence translation in italics under the original sentence.
+- **Same language as the book** (e.g. German → German): the sentence is rewritten in simpler language.
+
+### 34. Measuring models and prompts
+`tools/eval_words.py` (14 ambiguous words, CPU only, no graphics card):
+
+| | Old prompt | New prompt (sentence first) |
+| --- | --- | --- |
+| `qwen3:4b` | 8/14 · ~10 s per word | 7/14 · ~14 s |
+| `qwen3:8b` | 11/14 · ~11 s | **13/14** · ~20 s |
+
+- **Most of the gain comes from the larger model.** The new prompt adds two more correct words with
+  qwen3:8b (*fire* → "sa thải", *stand … auf* → "đứng dậy"), but costs ~8 s more on a CPU because the
+  answer is longer. With qwen3:4b it doesn't help: the small model already translates the German
+  sentence wrongly (*Bank* → "trường", *Schloss* → "chuyến đi").
+- With qwen3:8b, the cases that always failed before are now right: *lag* → "nằm", *Rücken* → "lưng",
+  *kaum* → "gần như không", *Bank* → "ghế dài", *Schloss* → "ổ khóa". The one remaining "fail",
+  *Ungeziefer* → "sinh vật đáng khinh" (contemptible creature), is close in meaning.
+- **Decision:** the code default stays `qwen3:4b` (as in the spec). This machine uses `qwen3:8b` through the
+  local `.env`, and the README recommends it with the measured numbers.
+
+### 35. Speed: show what's ready, load the model early
+- **Two steps:** the reader first calls `/lookup` with `quick: true`. That returns base form, language,
+  dictionary senses and the sentence (no model). The popover shows it with "Finding the meaning in this
+  sentence…", and pronunciation works right away. Then the reader asks again without `quick` for the
+  model's answer. A cached word comes back complete in the first step.
+- The dictionary result is kept in a small in-memory cache (1000 entries), so the second step doesn't
+  fetch it again. Network errors aren't cached.
+- **Warm-up:** opening a book calls `POST /api/warmup`. That loads the Ollama model (a request without a
+  prompt only loads it) and both spaCy models in the background.
+- **Measured in the browser** (qwen3:8b, CPU):
+
+| | Before | After |
+| --- | --- | --- |
+| Something useful on screen | after the whole lookup (~15–30 s) | **~2 s** (dictionary, base form, audio) |
+| First lookup after opening a book | + model loading time | model already loaded by the warm-up |
+| Quick step, first word | — | 5 s at first, because spaCy loaded on first use → also warmed up now → 1.9 s |
+| Same word again | 0.1 s (cache) | 0.1 s |
+
+  *Files:* `backend/main.py` (`quick`, `/api/warmup`), `backend/llm.py` (`warmup`, prompt v8),
+  `backend/nlp.py` (sense cache), `frontend/reader.js`, `frontend/style.css`, `tools/eval_words.py` (`-v`)
+
+### Still slow
+On this machine everything runs on the CPU. A graphics card supported by Ollama would make the model
+answer several times faster; the app needs no change for that.
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
@@ -410,16 +471,15 @@ existed since the beginning; the earlier tests only checked the section, not the
 | `/lookup` takes `{word, sentence}` | + optional `lang_hint`, `refresh` | Short-sentence language detection; ↻ Ask again |
 | Only single words are looked up | + phrases (≤ 4 words) through `/lookup`; + passages through new `POST /translate` (≤ 600 chars) | Feature request (#20) |
 | Meanings always in Vietnamese | Selectable: Vietnamese (default), English, German; `*_vi` fields hold the chosen language, `target_lang` says which | Feature request (#24) |
+| Model returns translation, gloss, sense | + `sentence` (translation of the whole sentence, written first) | Better word meanings with qwen3:8b (#33, #34) |
+| One `/lookup` call | Optional `quick` step first (dictionary only), then the model | Something useful on screen after ~2 s (#35) |
 
 ---
 
 ## Still open (ideas)
-- Test larger models with `tools/eval_words.py` (`qwen3:8b`, `gemma3:12b`) and pick a new default.
-- Show the dictionary result immediately and add the Vietnamese when it arrives (lookups currently take 6–11 s).
-- Look up phrases and idioms by drag-selecting several words.
-- Better German lemmas (`de_core_news_md`); the small model gives e.g. *ungeheueren* → "ungeheu".
-- Vocabulary: remember where in the book each word was saved and link back; built-in review mode.
-- German past-tense forms like *fing* aren't lemmatized (should be *fangen*), so dictionary and translation
-  miss. A larger spaCy model or a dictionary fallback for irregular verbs would help.
-- Reader: font size, themes (sepia/dark), progress %, scroll mode, touch support.
-- Unit tests for sentence extraction, lemmatization and JSON parsing.
+- **Review mode** (flashcards with spaced repetition) and words per book with a link back to the passage.
+- Popover and Translate button in the new design; bottom sheet on phones.
+- Book footnote numbers in chapter names ("Die drei Schläfer.(2)").
+- German adjective forms the lemmatizers miss (*ungeheueren* → should be *ungeheuer*).
+- Scroll mode, search in the book.
+- Automated tests in the repo (pytest + one browser smoke test); split `reader.js` into modules.
