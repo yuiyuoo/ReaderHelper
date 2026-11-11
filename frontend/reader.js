@@ -72,6 +72,8 @@
     bookName = info.filename;
     els.viewer.innerHTML = "";  // remove the "Opening book…" placeholder, epub.js appends to the container
 
+    // Load the language model now, so the first word lookup doesn't also wait for that.
+    fetch("/api/warmup", { method: "POST" }).catch(() => {});
     book = ePub(info.file_url, { openAs: "epub" });
     createRendition();
 
@@ -615,19 +617,33 @@
     positionPopover(anchor);
     if (autoplay && hintLang) speak(word, hintLang);
 
-    try {
+    const post = async (quick) => {
       const r = await fetch("/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ word, sentence, lang_hint: bookLang || null, refresh, target: target() }),
+        body: JSON.stringify({ word, sentence, lang_hint: bookLang || null, refresh, target: target(), quick }),
         signal: ctrl.signal,
       });
       const data = await r.json().catch(() => ({}));
-      if (seq !== lookupSeq) return;
       if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : `Server error (${r.status})`);
+      return data;
+    };
+
+    try {
+      // Step 1 (fast): base form, dictionary, audio. A cached answer comes back complete right away.
+      let data = await post(true);
+      if (seq !== lookupSeq) return;
       state.data = data;
       state.lang = data.lang;
       if (autoplay && !hintLang) speak(word, data.lang);
+      if (data.pending) {
+        renderPopover(state, "partial");
+        positionPopover(anchor);
+        // Step 2 (slow): the model's meaning for this sentence.
+        data = await post(false);
+        if (seq !== lookupSeq) return;
+        state.data = data;
+      }
       renderPopover(state, "done");
     } catch (e) {
       if (e.name === "AbortError" || seq !== lookupSeq) return;
@@ -655,10 +671,14 @@
     </div>`;
 
     if (phase === "loading") {
-      html += `<div class="section loading"><span class="spinner"></span>Looking up… the first lookup can take a while while the model loads.</div>`;
+      html += `<div class="section loading"><span class="spinner"></span>Looking up…</div>`;
     } else if (phase === "error") {
       html += `<div class="section error">${esc(state.error)}</div>`;
     } else {
+      // "partial": dictionary is here, the model's answer is still coming.
+      if (phase === "partial") {
+        html += `<div class="section loading"><span class="spinner"></span>Finding the meaning in this sentence…</div>`;
+      }
       if (d.translation_vi) {
         html += `<div class="section"><div class="label">${esc(L.tr)}</div>
           <div class="vi">${esc(d.translation_vi)}</div>
@@ -679,10 +699,13 @@
           `</ol></details>`;
       }
       html += `</div>`;
-      html += `<div class="section sentence">${esc(d.sentence || state.sentence)}</div>`;
-      html += `<div class="actions"><button class="save" data-act="save">Save word</button>
-        <button data-act="retry" title="Ignore the cached answer and ask the model again">↻ Ask again</button>
-        ${d.cached ? '<span class="sense">cached</span>' : ""}</div>`;
+      html += `<div class="section sentence">${esc(d.sentence || state.sentence)}` +
+        (d.sentence_tr ? `<div class="sentence-tr">${esc(d.sentence_tr)}</div>` : "") + `</div>`;
+      if (phase === "done") {
+        html += `<div class="actions"><button class="save" data-act="save">Save word</button>
+          <button data-act="retry" title="Ignore the cached answer and ask the model again">↻ Ask again</button>
+          ${d.cached ? '<span class="sense">cached</span>' : ""}</div>`;
+      }
     }
     els.popover.classList.remove("wide");
     els.popover.innerHTML = html;

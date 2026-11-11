@@ -1,6 +1,7 @@
 """Quick quality check for the lookup pipeline against a running server.
 
-Usage:  python tools/eval_words.py [base_url]      (default http://127.0.0.1:8000)
+Usage:  python tools/eval_words.py [base_url] [-v]   (default http://127.0.0.1:8000; -v also prints
+        the model's translation of the whole sentence)
 
 Each case passes if translation_vi or sense_vi contains one of the accepted Vietnamese keywords.
 Lookups use refresh=true, so the cache is bypassed (results are still written to it).
@@ -36,7 +37,8 @@ CASES = [
 
 
 def main() -> None:
-    base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000"
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    base = args[0] if args else "http://127.0.0.1:8000"
     passed = 0
     for word, sentence, ok in CASES:
         t = time.time()
@@ -46,6 +48,8 @@ def main() -> None:
         passed += hit
         print(f"{'PASS' if hit else 'FAIL'} {time.time() - t:4.1f}s {word:10} {r.get('lemma', ''):12} {answer}"
               + (f"   [warning: {r['warning']}]" if r.get("warning") else ""))
+        if r.get("sentence_tr") and "-v" in sys.argv:
+            print(f"{'':28}sentence: {r['sentence_tr']}")
     print(f"\n{passed}/{len(CASES)} passed")
 
 

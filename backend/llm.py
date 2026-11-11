@@ -23,6 +23,11 @@ WORD_EXAMPLE = {  # "banks" in "The children played on the banks of the river."
     "en": ("riverbank", "The land along the edge of a river.", "edge of a river"),
     "de": ("Ufer", "Das Land am Rand eines Flusses.", "Rand eines Gewässers"),
 }
+SENTENCE_EXAMPLE = {  # the same example sentence, translated
+    "vi": "Bọn trẻ chơi đùa trên bờ sông.",
+    "en": "The children played on the riverbank.",
+    "de": "Die Kinder spielten am Ufer des Flusses.",
+}
 PASSAGE_EXAMPLE = {  # "She couldn't make up her mind, so she stayed at home."
     "vi": ("Cô ấy không thể quyết định được, nên cô ở nhà.", "quyết định, đưa ra lựa chọn"),
     "en": ("She couldn't decide, so she stayed home.", "to decide, to choose"),
@@ -49,7 +54,7 @@ def mark_word(word: str, sentence: str) -> str:
 
 
 # Bump when the prompt changes meaningfully: it is part of the cache key, so old answers are not reused.
-PROMPT_VERSION = 7
+PROMPT_VERSION = 8
 
 
 def cache_variant(target: str = "vi") -> str:
@@ -83,22 +88,26 @@ def build_prompt(lang: str, word: str, sentence: str, lemma: str | None = None,
     return (
         _tutor_intro(target)
         + f"Task: explain ONE target {kind}, marked with [[ ]] in the sentence, exactly as it is used there. "
-        + (f"Explain only the target {kind}, not the other words of the sentence.\n" if same
-           else f"Translate only the target {kind}, not the other words of the sentence.\n")
-        + ("First read the numbered dictionary senses and pick the one that fits the sentence "
-           "(often NOT the first one), then explain that sense.\n" if senses else "")
-        + f"Keys: {sense_rules}"
+        + f"The word fields are about the target {kind} only, not the other words of the sentence.\n"
+        + (f"Step 1: rewrite the whole sentence in simpler {T}.\n" if same
+           else f"Step 1: translate the whole sentence into natural {T}.\n")
+        + ("Step 2: read the numbered dictionary senses and pick the one that matches your sentence "
+           "(often NOT the first one).\n" if senses else "")
+        + f"Step {3 if senses else 2}: explain the target {kind} with the meaning it has in your sentence; "
+        f'"translation" must be the {T} word you used for it there.\n'
+        + f'Keys: "sentence" (step 1), {sense_rules}'
         f'"translation" ({equivalent}), '
         f'"gloss" (simple {T} explanation of what the target {kind} means in this sentence, max 25 words; '
         'use "—" for proper nouns or trivial words), '
         f'"sense" (short {T} label of this sense, max 6 words).\n'
-        f"Write all three values in {T} only. No Chinese characters.\n\n"
+        f"Write all text values in {T} only. No Chinese characters.\n\n"
         "Example (shows the format only, do not copy its content):\n"
         "Language: English\nTarget word: banks (base form: bank)\n"
         + ("Dictionary senses (English):\n1. (noun) An institution where one can place and borrow money.\n"
            "2. (noun) An edge of river, lake, or other watercourse.\n" if senses else "")
         + "Sentence: The children played on the [[banks]] of the river.\n"
-        + ('{"sense_no": 2, ' if senses else "{")
+        + "{" + json.dumps({"sentence": SENTENCE_EXAMPLE[target]}, ensure_ascii=False)[1:-1]
+        + (', "sense_no": 2, ' if senses else ", ")
         + json.dumps({"translation": ex_tr, "gloss": ex_gloss, "sense": ex_sense}, ensure_ascii=False)[1:]
         + "\n\n"
         f"Language: {LANG_NAMES.get(lang, lang)}\n"
@@ -126,6 +135,8 @@ def parse_response(text: str, n_senses: int = 0) -> dict:
     if not isinstance(data, dict) or not all(isinstance(data.get(k), str) for k in MODEL_KEYS):
         raise ValueError("missing keys")
     out = {OUT_KEYS[k]: unicodedata.normalize("NFC", data[k].strip()) for k in MODEL_KEYS}
+    # Translation of the whole sentence (asked for first, so the word fits it).
+    out["sentence_tr"] = unicodedata.normalize("NFC", str(data.get("sentence") or "").strip())
     if not out["translation_vi"]:
         raise ValueError("empty translation")
     if any(CJK.search(v) for v in out.values()):
@@ -142,9 +153,11 @@ def parse_response(text: str, n_senses: int = 0) -> dict:
 def answer_schema(with_sense: bool) -> dict:
     """JSON schema for Ollama structured outputs: the model can only produce these keys
     (plain format="json" let small models echo the input back as JSON)."""
-    props = {k: {"type": "string"} for k in MODEL_KEYS}
+    # Key order matters: the model writes the sentence translation first and the word to match it.
+    props = {"sentence": {"type": "string"}}
     if with_sense:
-        props = {"sense_no": {"type": "integer"}, **props}
+        props["sense_no"] = {"type": "integer"}
+    props.update({k: {"type": "string"} for k in MODEL_KEYS})
     return {"type": "object", "properties": props, "required": list(props)}
 
 
@@ -178,6 +191,26 @@ async def _generate(client: httpx.AsyncClient, base: str, model: str, prompt: st
     return r.json().get("response", "")
 
 
+_warming = False
+
+
+async def warmup() -> None:
+    """Ask Ollama to load the model now (a request without a prompt only loads it). Errors are ignored:
+    if Ollama isn't running, the real lookup reports that properly."""
+    global _warming
+    if _warming:
+        return
+    _warming = True
+    base, model, timeout = _config()
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=10.0)) as client:
+            await client.post(f"{base}/api/generate", json={"model": model, "keep_alive": "30m"})
+    except httpx.HTTPError as e:
+        log.info("model warm-up skipped: %s", e)
+    finally:
+        _warming = False
+
+
 async def explain(lang: str, word: str, sentence: str, lemma: str | None = None,
                   senses: list[str] | None = None, target: str = "vi") -> dict:
     """Return {translation_vi, gloss_vi, sense_vi[, sense_no]} (text in the target language).
@@ -187,7 +220,8 @@ async def explain(lang: str, word: str, sentence: str, lemma: str | None = None,
     # Separate connect timeout so "Ollama not running" is reported as such, not as a slow model.
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=min(10.0, timeout + 5))) as client:
         for attempt in (1, 2):  # retry once on unusable output
-            raw = await _generate(client, base, model, prompt, answer_schema(bool(senses)))
+            # More tokens than before: the answer now also contains the translated sentence.
+            raw = await _generate(client, base, model, prompt, answer_schema(bool(senses)), num_predict=700)
             try:
                 return parse_response(raw, len(senses or []))
             except (ValueError, json.JSONDecodeError) as e:

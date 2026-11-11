@@ -216,6 +216,7 @@ class LookupIn(BaseModel):
     sentence: str = Field(min_length=1, max_length=2000)
     lang_hint: str | None = None  # optional: book language from EPUB metadata
     refresh: bool = False         # skip the cache and ask the model again
+    quick: bool = False           # only language, lemma and dictionary (fast); the model answer follows
     target: Literal["vi", "en", "de"] = "vi"  # language of the meaning/translation
 
 
@@ -238,23 +239,20 @@ async def lookup(q: LookupIn):
     # Dictionary first: the model chooses among its numbered senses (more reliable than letting a
     # small model guess). A failure in either step doesn't affect the other.
     senses, dict_err = await nlp.fetch_senses(lang, lemma, word, pos)
+    base = {
+        "lang": lang, "word": word, "lemma": lemma, "sentence": sentence,
+        "definition": senses[0] if senses else "", "senses": senses,
+        "definition_note": dict_err, "target_lang": q.target,
+    }
+    if q.quick:
+        # Step 1 of two: show this at once; the client then asks again without `quick` for the model's
+        # answer (the dictionary result is cached in memory, so that call doesn't fetch it again).
+        return {**base, "pending": True, "cached": False}
+
     llm_result = await _run_llm(lang, word, sentence, lemma, senses, q.target)
 
-    result = {
-        "lang": lang,
-        "word": word,
-        "lemma": lemma,
-        "sentence": sentence,
-        "definition": senses[0] if senses else "",
-        "senses": senses,
-        "sense_no": None,
-        "translation_vi": "",
-        "gloss_vi": "",
-        "sense_vi": "",
-        "warning": None,
-        "definition_note": dict_err,
-        "target_lang": q.target,
-    }
+    result = {**base, "sense_no": None, "translation_vi": "", "gloss_vi": "", "sense_vi": "",
+              "sentence_tr": "", "warning": None}
     if isinstance(llm_result, dict):
         result.update(llm_result)
         if result["sense_no"]:
@@ -303,6 +301,17 @@ async def translate(q: TranslateIn):
         log.exception("Passage translation failed")
         result["warning"] = f"Translation unavailable: {e}"
     return {**result, "cached": False}
+
+
+@app.post("/api/warmup")
+async def warmup():
+    """Load the model into memory in the background (the reader calls this when a book opens),
+    so the first word lookup doesn't also have to wait for the model to load. The spaCy models are
+    loaded too: that takes a few seconds on first use and would otherwise delay the quick step."""
+    asyncio.create_task(llm.warmup())
+    for lang in nlp.MODELS:
+        asyncio.create_task(asyncio.to_thread(nlp.get_nlp, lang))
+    return {"ok": True}
 
 
 async def _run_llm(lang, word, sentence, lemma, senses, target) -> dict | str:
