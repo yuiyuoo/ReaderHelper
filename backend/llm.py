@@ -1,4 +1,4 @@
-"""Vietnamese translation + in-context gloss via a local Ollama model."""
+"""Translation + in-context gloss (Vietnamese, English or German) via a local Ollama model."""
 import json
 import logging
 import os
@@ -9,9 +9,25 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-KEYS = ("translation_vi", "gloss_vi", "sense_vi")
-LANG_NAMES = {"en": "English", "de": "German"}
+# The model sees neutral key names; responses keep the API names (translation_vi, ...) from the spec,
+# but their content is in the chosen target language.
+MODEL_KEYS = ("translation", "gloss", "sense")
+OUT_KEYS = {"translation": "translation_vi", "gloss": "gloss_vi", "sense": "sense_vi"}
+LANG_NAMES = {"en": "English", "de": "German", "vi": "Vietnamese"}
+TARGETS = ("vi", "en", "de")
 CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿豈-﫿]")
+
+# One example per target language: small models copy the example's language, so it must match.
+WORD_EXAMPLE = {  # "banks" in "The children played on the banks of the river."
+    "vi": ("bờ sông", "Phần đất ở hai bên mép sông.", "bờ (sông, hồ)"),
+    "en": ("riverbank", "The land along the edge of a river.", "edge of a river"),
+    "de": ("Ufer", "Das Land am Rand eines Flusses.", "Rand eines Gewässers"),
+}
+PASSAGE_EXAMPLE = {  # "She couldn't make up her mind, so she stayed at home."
+    "vi": ("Cô ấy không thể quyết định được, nên cô ở nhà.", "quyết định, đưa ra lựa chọn"),
+    "en": ("She couldn't decide, so she stayed home.", "to decide, to choose"),
+    "de": ("Sie konnte sich nicht entscheiden, also blieb sie zu Hause.", "sich entscheiden"),
+}
 
 
 class LLMError(Exception):
@@ -33,16 +49,24 @@ def mark_word(word: str, sentence: str) -> str:
 
 
 # Bump when the prompt changes meaningfully: it is part of the cache key, so old answers are not reused.
-PROMPT_VERSION = 6
+PROMPT_VERSION = 7
 
 
-def cache_variant() -> str:
-    """Identifies who produced an answer (model + prompt), used in the lookup cache key."""
-    return f"{_config()[1]}|p{PROMPT_VERSION}"
+def cache_variant(target: str = "vi") -> str:
+    """Identifies who produced an answer (model + prompt + target language), used in the cache key."""
+    return f"{_config()[1]}|p{PROMPT_VERSION}|{target}"
+
+
+def _tutor_intro(target: str) -> str:
+    return (f"You are a language tutor for a B1 learner whose language is {LANG_NAMES[target]}. "
+            "Reply ONLY with JSON.\n")
 
 
 def build_prompt(lang: str, word: str, sentence: str, lemma: str | None = None,
-                 senses: list[str] | None = None) -> str:
+                 senses: list[str] | None = None, target: str = "vi") -> str:
+    T = LANG_NAMES[target]
+    same = target == lang  # e.g. German book, meaning in German: learner's-dictionary style
+    ex_tr, ex_gloss, ex_sense = WORD_EXAMPLE[target]
     base = f" (base form: {lemma})" if lemma and lemma.lower() != word.lower() else ""
     sense_rules = (
         '"sense_no" (number of the dictionary sense that fits THIS sentence; 0 if none fits), '
@@ -54,25 +78,29 @@ def build_prompt(lang: str, word: str, sentence: str, lemma: str | None = None,
     )
     # Multi-word selections are called "phrase"; single-word prompts stay exactly as before.
     kind = "phrase" if " " in word.strip() else "word"
+    equivalent = (f"a simpler {T} word or synonym for the target {kind}" if same
+                  else f"short {T} equivalent of the target {kind}")
     return (
-        "You are a Vietnamese tutor for a B1 learner. Reply ONLY with JSON.\n"
-        f"Task: explain ONE target {kind}, marked with [[ ]] in the sentence, exactly as it is used there. "
-        f"Translate only the target {kind}, not the other words of the sentence.\n"
+        _tutor_intro(target)
+        + f"Task: explain ONE target {kind}, marked with [[ ]] in the sentence, exactly as it is used there. "
+        + (f"Explain only the target {kind}, not the other words of the sentence.\n" if same
+           else f"Translate only the target {kind}, not the other words of the sentence.\n")
         + ("First read the numbered dictionary senses and pick the one that fits the sentence "
-           "(often NOT the first one), then translate that sense.\n" if senses else "")
+           "(often NOT the first one), then explain that sense.\n" if senses else "")
         + f"Keys: {sense_rules}"
-        f'"translation_vi" (short Vietnamese equivalent of the target {kind}), '
-        f'"gloss_vi" (Vietnamese explanation of what the target {kind} means in this sentence, max 25 words; '
+        f'"translation" ({equivalent}), '
+        f'"gloss" (simple {T} explanation of what the target {kind} means in this sentence, max 25 words; '
         'use "—" for proper nouns or trivial words), '
-        '"sense_vi" (short Vietnamese label of this sense, max 6 words).\n'
-        "Write the Vietnamese values in Vietnamese only. No Chinese characters.\n\n"
+        f'"sense" (short {T} label of this sense, max 6 words).\n'
+        f"Write all three values in {T} only. No Chinese characters.\n\n"
         "Example (shows the format only, do not copy its content):\n"
         "Language: English\nTarget word: banks (base form: bank)\n"
         + ("Dictionary senses (English):\n1. (noun) An institution where one can place and borrow money.\n"
            "2. (noun) An edge of river, lake, or other watercourse.\n" if senses else "")
         + "Sentence: The children played on the [[banks]] of the river.\n"
         + ('{"sense_no": 2, ' if senses else "{")
-        + '"translation_vi": "bờ sông", "gloss_vi": "Phần đất ở hai bên mép sông.", "sense_vi": "bờ (sông, hồ)"}\n\n'
+        + json.dumps({"translation": ex_tr, "gloss": ex_gloss, "sense": ex_sense}, ensure_ascii=False)[1:]
+        + "\n\n"
         f"Language: {LANG_NAMES.get(lang, lang)}\n"
         f"Target {kind}: {word}{base}\n"
         f"{query_senses}"
@@ -95,9 +123,9 @@ def parse_response(text: str, n_senses: int = 0) -> dict:
     except json.JSONDecodeError:
         m = re.search(r"\{.*\}", text, flags=re.S)
         data = json.loads(m.group(0)) if m else None
-    if not isinstance(data, dict) or not all(isinstance(data.get(k), str) for k in KEYS):
+    if not isinstance(data, dict) or not all(isinstance(data.get(k), str) for k in MODEL_KEYS):
         raise ValueError("missing keys")
-    out = {k: unicodedata.normalize("NFC", data[k].strip()) for k in KEYS}
+    out = {OUT_KEYS[k]: unicodedata.normalize("NFC", data[k].strip()) for k in MODEL_KEYS}
     if not out["translation_vi"]:
         raise ValueError("empty translation")
     if any(CJK.search(v) for v in out.values()):
@@ -114,7 +142,7 @@ def parse_response(text: str, n_senses: int = 0) -> dict:
 def answer_schema(with_sense: bool) -> dict:
     """JSON schema for Ollama structured outputs: the model can only produce these keys
     (plain format="json" let small models echo the input back as JSON)."""
-    props = {k: {"type": "string"} for k in KEYS}
+    props = {k: {"type": "string"} for k in MODEL_KEYS}
     if with_sense:
         props = {"sense_no": {"type": "integer"}, **props}
     return {"type": "object", "properties": props, "required": list(props)}
@@ -151,10 +179,11 @@ async def _generate(client: httpx.AsyncClient, base: str, model: str, prompt: st
 
 
 async def explain(lang: str, word: str, sentence: str, lemma: str | None = None,
-                  senses: list[str] | None = None) -> dict:
-    """Return {translation_vi, gloss_vi, sense_vi[, sense_no]}. Raises LLMError with a friendly message."""
+                  senses: list[str] | None = None, target: str = "vi") -> dict:
+    """Return {translation_vi, gloss_vi, sense_vi[, sense_no]} (text in the target language).
+    Raises LLMError with a friendly message."""
     base, model, timeout = _config()
-    prompt = build_prompt(lang, word, sentence, lemma, senses)
+    prompt = build_prompt(lang, word, sentence, lemma, senses, target)
     # Separate connect timeout so "Ollama not running" is reported as such, not as a slow model.
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=min(10.0, timeout + 5))) as client:
         for attempt in (1, 2):  # retry once on unusable output
@@ -171,48 +200,55 @@ async def explain(lang: str, word: str, sentence: str, lemma: str | None = None,
 PASSAGE_SCHEMA = {
     "type": "object",
     "properties": {
-        "translation_vi": {"type": "string"},
+        "translation": {"type": "string"},
         "notes": {
             "type": "array",
             "items": {
                 "type": "object",
-                "properties": {"term": {"type": "string"}, "explanation_vi": {"type": "string"}},
-                "required": ["term", "explanation_vi"],
+                "properties": {"term": {"type": "string"}, "explanation": {"type": "string"}},
+                "required": ["term", "explanation"],
             },
         },
     },
-    "required": ["translation_vi", "notes"],
+    "required": ["translation", "notes"],
 }
 
 
-def build_passage_prompt(lang: str, text: str) -> str:
-    return (
-        "You are a Vietnamese tutor for a B1 learner. Reply ONLY with JSON.\n"
-        f"Task: translate the {LANG_NAMES.get(lang, lang)} text into natural, fluent Vietnamese "
+def build_passage_prompt(lang: str, text: str, target: str = "vi") -> str:
+    T = LANG_NAMES[target]
+    ex_tr, ex_note = PASSAGE_EXAMPLE[target]
+    task = (
+        f"Task: rewrite the {T} text in simpler, clear {T} for a learner (keep the meaning).\n"
+        if target == lang else
+        f"Task: translate the {LANG_NAMES.get(lang, lang)} text into natural, fluent {T} "
         "(keep the meaning and tone; do not translate word by word).\n"
-        'Keys: "translation_vi" (the full Vietnamese translation), '
+    )
+    return (
+        _tutor_intro(target)
+        + task
+        + f'Keys: "translation" (the full {T} version), '
         '"notes" (up to 3 difficult words or expressions copied exactly from the text, each with '
-        '"term" and "explanation_vi": a short Vietnamese explanation, max 15 words; [] if nothing is difficult).\n'
-        "Write Vietnamese only. No Chinese characters.\n\n"
+        f'"term" and "explanation": a short {T} explanation, max 15 words; [] if nothing is difficult).\n'
+        f"Write {T} only. No Chinese characters.\n\n"
         "Example (shows the format only, do not copy its content):\n"
         "Text: She couldn't make up her mind, so she stayed at home.\n"
-        '{"translation_vi": "Cô ấy không thể quyết định được, nên cô ở nhà.", '
-        '"notes": [{"term": "make up her mind", "explanation_vi": "quyết định, đưa ra lựa chọn"}]}\n\n'
-        f"Text: {text}\n"
+        + json.dumps({"translation": ex_tr, "notes": [{"term": "make up her mind", "explanation": ex_note}]},
+                     ensure_ascii=False)
+        + f"\n\nText: {text}\n"
         "Answer (JSON):\n"
     )
 
 
 def parse_passage(raw: str, text: str) -> dict:
     data = json.loads(re.sub(r"<think>.*?</think>", "", raw, flags=re.S).strip().strip("`"))
-    tr = unicodedata.normalize("NFC", str(data.get("translation_vi", "")).strip())
+    tr = unicodedata.normalize("NFC", str(data.get("translation", "")).strip())
     if not tr:
         raise ValueError("empty translation")
     notes = []
     for n in data.get("notes") or []:
         if not isinstance(n, dict):
             continue
-        term, expl = str(n.get("term", "")).strip(), str(n.get("explanation_vi", "")).strip()
+        term, expl = str(n.get("term", "")).strip(), str(n.get("explanation", "")).strip()
         # Drop notes whose term isn't really in the text (small models invent some), and "notes"
         # that are whole sentences: they just repeat the translation.
         if term and expl and term.lower() in text.lower() and len(term.split()) <= 4:
@@ -222,10 +258,11 @@ def parse_passage(raw: str, text: str) -> dict:
     return {"translation_vi": tr, "notes": notes[:3]}
 
 
-async def translate_passage(lang: str, text: str) -> dict:
-    """Return {translation_vi, notes:[{term, explanation_vi}]}. Raises LLMError with a friendly message."""
+async def translate_passage(lang: str, text: str, target: str = "vi") -> dict:
+    """Return {translation_vi, notes:[{term, explanation_vi}]} (text in the target language).
+    Raises LLMError with a friendly message."""
     base, model, timeout = _config()
-    prompt = build_passage_prompt(lang, text)
+    prompt = build_passage_prompt(lang, text, target)
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=min(10.0, timeout + 5))) as client:
         for attempt in (1, 2):
             # A few sentences in Vietnamese plus notes need more tokens than a single word.

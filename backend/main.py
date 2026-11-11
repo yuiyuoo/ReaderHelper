@@ -6,6 +6,7 @@ import logging
 import re
 import unicodedata
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -80,6 +81,7 @@ class LookupIn(BaseModel):
     sentence: str = Field(min_length=1, max_length=2000)
     lang_hint: str | None = None  # optional: book language from EPUB metadata
     refresh: bool = False         # skip the cache and ask the model again
+    target: Literal["vi", "en", "de"] = "vi"  # language of the meaning/translation
 
 
 @app.post("/lookup")
@@ -93,7 +95,7 @@ async def lookup(q: LookupIn):
     except OSError:
         raise HTTPException(500, f"spaCy model for '{lang}' is missing. Run `python -m spacy download {nlp.MODELS[lang]}`.")
 
-    variant = llm.cache_variant()
+    variant = llm.cache_variant(q.target)
     cached = None if q.refresh else db.get_cached(lang, lemma, sentence, variant)
     if cached:
         return {**cached, "word": word, "cached": True}
@@ -101,7 +103,7 @@ async def lookup(q: LookupIn):
     # Dictionary first: the model chooses among its numbered senses (more reliable than letting a
     # small model guess). A failure in either step doesn't affect the other.
     senses, dict_err = await nlp.fetch_senses(lang, lemma, word, pos)
-    llm_result = await _run_llm(lang, word, sentence, lemma, senses)
+    llm_result = await _run_llm(lang, word, sentence, lemma, senses, q.target)
 
     result = {
         "lang": lang,
@@ -116,6 +118,7 @@ async def lookup(q: LookupIn):
         "sense_vi": "",
         "warning": None,
         "definition_note": dict_err,
+        "target_lang": q.target,
     }
     if isinstance(llm_result, dict):
         result.update(llm_result)
@@ -137,6 +140,7 @@ class TranslateIn(BaseModel):
     text: str = Field(min_length=1, max_length=5000)
     lang_hint: str | None = None
     refresh: bool = False
+    target: Literal["vi", "en", "de"] = "vi"
 
 
 @app.post("/translate")
@@ -148,14 +152,15 @@ async def translate(q: TranslateIn):
                  f"Select at most about {MAX_PASSAGE_CHARS} characters (3–4 sentences)."
         )
     lang = nlp.detect_lang(text, q.lang_hint)
-    variant = llm.cache_variant()
+    variant = llm.cache_variant(q.target)
     cached = None if q.refresh else db.get_cached(lang, PASSAGE_KEY, text, variant)
     if cached:
         return {**cached, "cached": True}
 
-    result = {"lang": lang, "text": text, "translation_vi": "", "notes": [], "warning": None}
+    result = {"lang": lang, "target_lang": q.target, "text": text, "translation_vi": "", "notes": [],
+              "warning": None}
     try:
-        result.update(await llm.translate_passage(lang, text))
+        result.update(await llm.translate_passage(lang, text, q.target))
         db.put_cached(lang, PASSAGE_KEY, text, variant, result)
     except llm.LLMError as e:
         result["warning"] = str(e)
@@ -165,10 +170,10 @@ async def translate(q: TranslateIn):
     return {**result, "cached": False}
 
 
-async def _run_llm(lang, word, sentence, lemma, senses) -> dict | str:
+async def _run_llm(lang, word, sentence, lemma, senses, target) -> dict | str:
     """Return the model's fields, or a warning string if the step failed."""
     try:
-        return await llm.explain(lang, word, sentence, lemma, senses)
+        return await llm.explain(lang, word, sentence, lemma, senses, target)
     except llm.LLMError as e:
         return str(e)
     except Exception as e:  # never let the LLM step break the lookup
@@ -185,6 +190,7 @@ class VocabIn(BaseModel):
     sentence: str
     translation_vi: str = ""
     gloss_vi: str = ""
+    target_lang: Literal["vi", "en", "de"] = "vi"
 
 
 @app.post("/api/vocab")

@@ -7,7 +7,15 @@
     bookSelect: $("bookSelect"), upload: $("upload"), toc: $("tocSelect"),
     viewer: $("viewer"), prev: $("prev"), next: $("next"),
     status: $("status"), popover: $("popover"), autoplay: $("autoplay"), selBtn: $("selBtn"),
+    target: $("targetSelect"),
   };
+  // Popover labels in the chosen meaning language.
+  const LABELS = {
+    vi: { tr: "Tiếng Việt", gloss: "Nghĩa trong câu này", passage: "Bản dịch", notes: "Ghi chú" },
+    en: { tr: "English", gloss: "Meaning in this sentence", passage: "Translation", notes: "Notes" },
+    de: { tr: "Deutsch", gloss: "Bedeutung in diesem Satz", passage: "Übersetzung", notes: "Hinweise" },
+  };
+  const target = () => (LABELS[els.target.value] ? els.target.value : "vi");
   const MAX_PASSAGE_CHARS = 600;  // keep in sync with backend/main.py
   const MAX_PHRASE_WORDS = 4;     // longer selections are translated as a passage
   let pendingSel = null;          // selection waiting for the Translate button
@@ -306,7 +314,7 @@
       const r = await fetch("/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ text, lang_hint: bookLang || null, refresh }),
+        body: JSON.stringify({ text, lang_hint: bookLang || null, refresh, target: target() }),
         signal: ctrl.signal,
       });
       const data = await r.json().catch(() => ({}));
@@ -327,8 +335,9 @@
 
   function renderPassage(state, phase) {
     const d = state.data;
+    const L = LABELS[d?.target_lang] || LABELS[target()];
     let html = `<div class="head">
-      <span class="word">Bản dịch</span>
+      <span class="word">${esc(L.passage)}</span>
       ${state.lang ? `<span class="lang">${esc(state.lang)}</span>` : ""}
       <button class="icon" data-act="speak" title="Read the original aloud">🔊</button>
       <button class="close" data-act="close" title="Close (Esc)">×</button>
@@ -340,10 +349,10 @@
       html += `<div class="section error">${esc(state.error)}</div>`;
     } else {
       if (d.translation_vi) {
-        html += `<div class="section"><div class="label">Tiếng Việt</div><div class="passage-vi">${esc(d.translation_vi)}</div></div>`;
+        html += `<div class="section"><div class="label">${esc(L.tr)}</div><div class="passage-vi">${esc(d.translation_vi)}</div></div>`;
       }
       if (d.notes?.length) {
-        html += `<div class="section"><div class="label">Ghi chú</div><ul class="notes">` +
+        html += `<div class="section"><div class="label">${esc(L.notes)}</div><ul class="notes">` +
           d.notes.map((n) => `<li><b>${esc(n.term)}</b>: ${esc(n.explanation_vi)}</li>`).join("") + `</ul></div>`;
       }
       if (d.warning) html += `<div class="section warning">${esc(d.warning)}</div>`;
@@ -379,7 +388,7 @@
       const r = await fetch("/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ word, sentence, lang_hint: bookLang || null, refresh }),
+        body: JSON.stringify({ word, sentence, lang_hint: bookLang || null, refresh, target: target() }),
         signal: ctrl.signal,
       });
       const data = await r.json().catch(() => ({}));
@@ -404,6 +413,7 @@
 
   function renderPopover(state, phase) {
     const d = state.data;
+    const L = LABELS[d?.target_lang] || LABELS[target()];
     const lemma = d?.lemma && d.lemma.toLowerCase() !== state.word.toLowerCase()
       ? `<span class="lemma">← ${esc(d.lemma)}</span>` : "";
     let html = `<div class="head">
@@ -419,12 +429,12 @@
       html += `<div class="section error">${esc(state.error)}</div>`;
     } else {
       if (d.translation_vi) {
-        html += `<div class="section"><div class="label">Tiếng Việt</div>
+        html += `<div class="section"><div class="label">${esc(L.tr)}</div>
           <div class="vi">${esc(d.translation_vi)}</div>
           ${d.sense_vi ? `<div class="sense">${esc(d.sense_vi)}</div>` : ""}</div>`;
       }
       if (d.gloss_vi) {
-        html += `<div class="section"><div class="label">Nghĩa trong câu này</div><div>${esc(d.gloss_vi)}</div></div>`;
+        html += `<div class="section"><div class="label">${esc(L.gloss)}</div><div>${esc(d.gloss_vi)}</div></div>`;
       }
       if (d.warning) html += `<div class="section warning">${esc(d.warning)}</div>`;
       const senses = d.senses || [];
@@ -499,7 +509,7 @@
         headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({
           lang: d.lang, word: d.word, lemma: d.lemma, sentence: d.sentence,
-          translation_vi: d.translation_vi, gloss_vi: d.gloss_vi,
+          translation_vi: d.translation_vi, gloss_vi: d.gloss_vi, target_lang: d.target_lang || "vi",
         }),
       });
       if (!r.ok) throw new Error();
@@ -542,6 +552,8 @@
 
   // ---------- init ----------
   els.autoplay.checked = store.get("autoplay") === "1";
+  els.target.value = LABELS[store.get("target")] ? store.get("target") : "vi";
+  els.target.addEventListener("change", () => { store.set("target", target()); closePopover(); });
   els.autoplay.addEventListener("change", () => store.set("autoplay", els.autoplay.checked ? "1" : "0"));
   loadSavedWords().then(() => loadBookList());
 })();

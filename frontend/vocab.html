@@ -39,7 +39,7 @@
     function viewRow(v) {
       return `<tr data-id="${v.id}">
         <td>${wordCell(v)}</td>
-        <td class="notes-cell"><strong>${esc(v.translation_vi)}</strong><br>${esc(v.gloss_vi)}</td>
+        <td class="notes-cell"><strong>${esc(v.translation_vi)}</strong> <span class="lang-tag" title="Language of the meaning">${esc(v.target_lang || "vi")}</span><br>${esc(v.gloss_vi)}</td>
         <td class="sent">${esc(v.sentence)}</td>
         <td><small>${esc(new Date(v.created_at).toLocaleDateString())}</small></td>
         <td class="row-actions">

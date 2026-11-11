@@ -38,10 +38,14 @@ def init_db() -> None:
                 sentence TEXT NOT NULL,
                 translation_vi TEXT NOT NULL DEFAULT '',
                 gloss_vi TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                target_lang TEXT NOT NULL DEFAULT 'vi'  -- language of translation/gloss
             );
             """
         )
+        # Older databases: add the column; existing entries were all Vietnamese.
+        if "target_lang" not in [r["name"] for r in conn.execute("PRAGMA table_info(vocab)")]:
+            conn.execute("ALTER TABLE vocab ADD COLUMN target_lang TEXT NOT NULL DEFAULT 'vi'")
 
 
 def _now() -> str:
@@ -67,11 +71,13 @@ def put_cached(lang: str, lemma: str, sentence: str, variant: str, result: dict)
 
 
 def add_vocab(item: dict) -> dict:
-    """Insert a word, or update the existing entry for the same lemma in the same sentence."""
+    """Insert a word, or update the existing entry for the same lemma in the same sentence
+    with the same meaning language."""
+    target = item.get("target_lang", "vi")
     with _conn() as conn:
         existing = conn.execute(
-            "SELECT id FROM vocab WHERE lang=? AND lemma=? AND sentence=?",
-            (item["lang"], item["lemma"], item["sentence"]),
+            "SELECT id FROM vocab WHERE lang=? AND lemma=? AND sentence=? AND target_lang=?",
+            (item["lang"], item["lemma"], item["sentence"], target),
         ).fetchone()
         if existing:
             conn.execute(
@@ -80,10 +86,11 @@ def add_vocab(item: dict) -> dict:
             )
             return dict(conn.execute("SELECT * FROM vocab WHERE id=?", (existing["id"],)).fetchone())
         cur = conn.execute(
-            "INSERT INTO vocab (lang, word, lemma, sentence, translation_vi, gloss_vi, created_at) VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO vocab (lang, word, lemma, sentence, translation_vi, gloss_vi, created_at, target_lang)"
+            " VALUES (?,?,?,?,?,?,?,?)",
             (
                 item["lang"], item["word"], item["lemma"], item["sentence"],
-                item.get("translation_vi", ""), item.get("gloss_vi", ""), _now(),
+                item.get("translation_vi", ""), item.get("gloss_vi", ""), _now(), target,
             ),
         )
         row = conn.execute("SELECT * FROM vocab WHERE id=?", (cur.lastrowid,)).fetchone()
