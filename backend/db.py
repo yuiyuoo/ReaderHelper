@@ -41,6 +41,16 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 target_lang TEXT NOT NULL DEFAULT 'vi'  -- language of translation/gloss
             );
+            CREATE TABLE IF NOT EXISTS books (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT NOT NULL UNIQUE,      -- file in books/
+                title TEXT NOT NULL,                -- display name (editable)
+                author TEXT NOT NULL DEFAULT '',
+                language TEXT NOT NULL DEFAULT '',
+                cover TEXT NOT NULL DEFAULT '',     -- file in covers/, '' = default icon
+                added_at TEXT NOT NULL,
+                opened_at TEXT                      -- last time it was opened in the reader
+            );
             """
         )
         # Older databases: add the column; existing entries were all Vietnamese.
@@ -120,4 +130,55 @@ def update_vocab(vocab_id: int, changes: dict) -> dict | None:
 def delete_vocab(vocab_id: int) -> bool:
     with _conn() as conn:
         cur = conn.execute("DELETE FROM vocab WHERE id=?", (vocab_id,))
+    return cur.rowcount > 0
+
+
+# ---------- books (library) ----------
+
+BOOK_FIELDS = ("title", "author", "cover")
+
+
+def list_books() -> list[dict]:
+    """Most recently opened first, then most recently added."""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM books ORDER BY opened_at IS NULL, opened_at DESC, added_at DESC, id DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_book(book_id: int) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM books WHERE id=?", (book_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def add_book(filename: str, title: str, author: str = "", language: str = "", cover: str = "") -> dict:
+    with _conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO books (filename, title, author, language, cover, added_at) VALUES (?,?,?,?,?,?)",
+            (filename, title, author, language, cover, _now()),
+        )
+        row = conn.execute("SELECT * FROM books WHERE id=?", (cur.lastrowid,)).fetchone()
+    return dict(row)
+
+
+def update_book(book_id: int, changes: dict) -> dict | None:
+    fields = {k: v for k, v in changes.items() if k in BOOK_FIELDS}
+    with _conn() as conn:
+        if fields:
+            sets = ", ".join(f"{k}=?" for k in fields)  # keys come from the whitelist above
+            conn.execute(f"UPDATE books SET {sets} WHERE id=?", (*fields.values(), book_id))
+        row = conn.execute("SELECT * FROM books WHERE id=?", (book_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def mark_book_opened(book_id: int) -> None:
+    with _conn() as conn:
+        conn.execute("UPDATE books SET opened_at=? WHERE id=?", (_now(), book_id))
+
+
+def delete_book(book_id: int) -> bool:
+    with _conn() as conn:
+        cur = conn.execute("DELETE FROM books WHERE id=?", (book_id,))
     return cur.rowcount > 0
