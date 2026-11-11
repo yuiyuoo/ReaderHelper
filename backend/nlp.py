@@ -5,6 +5,7 @@ import re
 from functools import lru_cache
 
 import httpx
+import simplemma
 import spacy
 from langdetect import DetectorFactory, LangDetectException, detect_langs
 
@@ -57,6 +58,18 @@ def pick_sentence(lang: str, word: str, sentence: str) -> str:
     return sentence.strip()
 
 
+def _base_form(lang: str, tok) -> str:
+    """spaCy's lemma, or (German only) simplemma's when spaCy left the word unchanged. The small German
+    spaCy model doesn't know many irregular forms ("fing", "molk", "aß"), which simplemma's word lists do.
+    Not used for English: spaCy is good there, and simplemma turns adjectives like "tired" into "tire"."""
+    lemma = tok.lemma_.strip() or tok.text
+    if lang == "de" and lemma.lower() == tok.text.lower() and tok.pos_ not in ("PROPN", "PUNCT", "NUM"):
+        alt = simplemma.lemmatize(tok.text, lang=lang)
+        if alt and alt.lower() != tok.text.lower():
+            return alt
+    return lemma
+
+
 def lemmatize(lang: str, word: str, sentence: str) -> tuple[str, str]:
     """Return (lemma, coarse POS tag). German separable verbs are joined: "stand ... auf" -> "aufstehen"."""
     nlp = get_nlp(lang)
@@ -73,11 +86,11 @@ def lemmatize(lang: str, word: str, sentence: str) -> tuple[str, str]:
         tok = doc[0] if len(doc) else None
     if tok is None:
         return word, ""
-    lemma, pos = tok.lemma_.strip() or word, tok.pos_
+    lemma, pos = _base_form(lang, tok), tok.pos_
     if lang == "de":
         # spaCy marks a separated verb particle with dep "svp", attached to its verb.
         if tok.dep_ == "svp" and tok.head.pos_ in ("VERB", "AUX"):
-            lemma, pos = tok.text.lower() + tok.head.lemma_, "VERB"
+            lemma, pos = tok.text.lower() + _base_form(lang, tok.head), "VERB"
         elif tok.pos_ in ("VERB", "AUX"):
             particle = next((c for c in tok.children if c.dep_ == "svp"), None)
             if particle is not None:
@@ -163,8 +176,29 @@ def _select(groups: Groups, pos: str) -> list[str]:
     return out
 
 
+# Small in-memory cache: a word lookup asks for the senses twice (quick step, then with the model).
+# Network errors are not cached, so a short outage doesn't stick.
+_SENSE_CACHE: dict[tuple, tuple[list[str], str | None]] = {}
+_SENSE_CACHE_MAX = 1000
+
+
 async def fetch_senses(lang: str, lemma: str, word: str, pos: str = "") -> tuple[list[str], str | None]:
     """Return (senses, error_message), senses formatted "(pos) definition". Never raises."""
+    key = (lang, lemma, word, pos)
+    if key in _SENSE_CACHE:
+        return _SENSE_CACHE[key]
+    result = await _fetch_senses(lang, lemma, word, pos)
+    if result[0] or result[1] == NOT_FOUND:
+        if len(_SENSE_CACHE) >= _SENSE_CACHE_MAX:
+            _SENSE_CACHE.pop(next(iter(_SENSE_CACHE)))  # drop the oldest entry
+        _SENSE_CACHE[key] = result
+    return result
+
+
+NOT_FOUND = "No dictionary entry found for this word."
+
+
+async def _fetch_senses(lang: str, lemma: str, word: str, pos: str) -> tuple[list[str], str | None]:
     candidates = []
     for t in (lemma, word, word.lower(), word.capitalize()):
         if t and t not in candidates:
@@ -176,7 +210,7 @@ async def fetch_senses(lang: str, lemma: str, word: str, pos: str = "") -> tuple
                 senses = _select(await fetch(client, term), pos)
                 if senses:
                     return senses, None
-        return [], "No dictionary entry found for this word."
+        return [], NOT_FOUND
     except (httpx.HTTPError, ValueError, DictUnavailable) as e:
         log.warning("dictionary lookup failed: %s", e)
         return [], "Dictionary service is unreachable right now."
