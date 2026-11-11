@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vocabulary · ReaderHelper</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%232f6fb3'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,600;1,400&subset=vietnamese&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="toolbar">
+    <strong class="brand">ReaderHelper</strong>
+    <a class="btn" href="/">← Back to reader</a>
+    <span class="spacer"></span>
+    <a class="btn" href="/api/vocab.csv" download>Export CSV (Anki)</a>
+  </header>
+  <div class="page">
+    <h2 id="count">Saved words</h2>
+    <table>
+      <thead><tr><th>Word</th><th>Lang</th><th>Tiếng Việt</th><th>Sentence</th><th>Saved</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="empty" class="empty" hidden>No saved words yet. Click a word while reading and press “Save word”.</div>
+  </div>
+  <script>
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    async function load() {
+      const rows = document.getElementById("rows");
+      let items = [];
+      try { items = await (await fetch("/api/vocab")).json(); }
+      catch { rows.innerHTML = `<tr><td colspan="6" class="error">Could not load vocabulary.</td></tr>`; return; }
+      document.getElementById("count").textContent = `Saved words (${items.length})`;
+      document.getElementById("empty").hidden = items.length > 0;
+      rows.innerHTML = items.map((v) => `
+        <tr>
+          <td><strong>${esc(v.word)}</strong>${v.lemma && v.lemma.toLowerCase() !== v.word.toLowerCase() ? `<br><small>${esc(v.lemma)}</small>` : ""}</td>
+          <td>${esc(v.lang)}</td>
+          <td><strong>${esc(v.translation_vi)}</strong><br>${esc(v.gloss_vi)}</td>
+          <td class="sent">${esc(v.sentence)}</td>
+          <td><small>${esc(new Date(v.created_at).toLocaleDateString())}</small></td>
+          <td><button data-id="${v.id}" title="Delete">Delete</button></td>
+        </tr>`).join("");
+    }
+
+    document.getElementById("rows").addEventListener("click", async (e) => {
+      const id = e.target.dataset?.id;
+      if (!id || !confirm("Delete this word?")) return;
+      const r = await fetch(`/api/vocab/${id}`, { method: "DELETE" });
+      if (r.ok) load(); else alert("Delete failed.");
+    });
+    load();
+  </script>
+</body>
+</html>
