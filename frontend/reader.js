@@ -6,7 +6,7 @@
   const els = {
     bookTitle: $("bookTitle"), tocBtn: $("tocBtn"), tocMenu: $("tocMenu"), tocList: $("tocList"),
     chapter: $("chapterLabel"), pct: $("progressPct"), fill: $("progressFill"),
-    fontDown: $("fontDown"), fontUp: $("fontUp"), targetGroup: $("targetGroup"),
+    fontDown: $("fontDown"), fontUp: $("fontUp"), targetGroup: $("targetGroup"), spreadBtn: $("spreadBtn"),
     viewer: $("viewer"), prev: $("prev"), next: $("next"), vocabCount: $("vocabCount"),
     status: $("status"), popover: $("popover"), autoplay: $("autoplay"), selBtn: $("selBtn"),
   };
@@ -33,7 +33,15 @@
   let currentTarget = LABELS[store.get("target")] ? store.get("target") : "vi";
   let autoplay = store.get("autoplay") === "1";
   let fontPct = Math.min(FONT_MAX, Math.max(FONT_MIN, Number(store.get("fontSize")) || 100));
+  let twoPages = store.get("spread") === "2";  // two pages side by side, like an open book
+  const MIN_SPREAD_WIDTH = 760;  // below this width epub.js falls back to one page by itself
   let tocItems = [];            // flattened TOC: {label, href, depth, spineIndex}
+  // Last position reported by epub.js. Its currentLocation() can return a stale page
+  // (e.g. after the web font changed the line breaks), so this is used instead.
+  let lastLocation = null;
+  // Text the reader was at when switching one/two pages. Kept until they turn a page themselves, so
+  // switching back and forth always returns to the same page (a spread starts one page earlier).
+  let spreadAnchor = null;
   const target = () => currentTarget;
 
   // ---------- book (from /read?book=<id>) ----------
@@ -65,25 +73,62 @@
     els.viewer.innerHTML = "";  // remove the "Opening book…" placeholder, epub.js appends to the container
 
     book = ePub(info.file_url, { openAs: "epub" });
-    rendition = book.renderTo(els.viewer, { width: "100%", height: "100%", flow: "paginated", spread: "none" });
-    rendition.hooks.content.register(onContent);
-    rendition.on("relocated", onRelocated);
-    rendition.on("keyup", onKey);
-    rendition.themes.fontSize(`${fontPct}%`);
+    createRendition();
 
     try {
       await book.ready;
       bookLang = (book.packaging.metadata.language || "").slice(0, 2).toLowerCase();
-      await rendition.display(store.get(`pos:${bookName}`) || undefined);
+      await displayAt(store.get(`pos:${bookName}`));
       els.prev.disabled = els.next.disabled = false;
       await buildToc();
-      updateChapter(rendition.currentLocation());
+      updateChapter(lastLocation);
       setupProgress();  // may take a moment for long books; runs after the page is shown
     } catch (e) {
       console.error(e);
       els.chapter.textContent = "Could not open the book";
       setStatus(`Could not open this EPUB: ${e.message || e}`);
     }
+  }
+
+  /** Show `cfi`, then again once the book's web font has loaded: the font changes line breaks,
+   *  which would otherwise leave the view on a different page than the one asked for. */
+  async function displayAt(cfi) {
+    await rendition.display(cfi || undefined);
+    if (!cfi) return;
+    await Promise.all(rendition.getContents().map((c) => c.rhFontReady).filter(Boolean));
+    await rendition.display(cfi);
+    // A saved position is the first character of a page, i.e. exactly on a page boundary. epub.js sometimes
+    // rounds that down and shows the page before, so turn forward until the position is really on screen.
+    for (let i = 0; i < 3 && !isOnScreen(cfi); i++) await rendition.next();
+  }
+
+  function isOnScreen(cfi) {
+    let range;
+    try { range = rendition.getRange(cfi); } catch { return true; }  // can't check: accept
+    if (!range) return true;
+    // A saved position is an empty range, which has no on-screen box: measure the first character instead.
+    const r0 = range.cloneRange();
+    const n = r0.startContainer;
+    if (n.nodeType === Node.TEXT_NODE && r0.startOffset < n.length) r0.setEnd(n, r0.startOffset + 1);
+    else if (n.nodeType === Node.ELEMENT_NODE) r0.selectNodeContents(n.childNodes[r0.startOffset] || n);
+    const r = r0.getClientRects()[0];
+    if (!r) return true;
+    const frame = n.ownerDocument.defaultView.frameElement.getBoundingClientRect();
+    const view = els.viewer.getBoundingClientRect();
+    const x = frame.left + r.left + r.width / 2;
+    return x >= view.left - 1 && x <= view.right + 1;
+  }
+
+  /** The view of the book (one or two pages). Rebuilt when switching page mode. */
+  function createRendition() {
+    rendition = book.renderTo(els.viewer, {
+      width: "100%", height: "100%", flow: "paginated",
+      spread: twoPages ? "always" : "none", minSpreadWidth: MIN_SPREAD_WIDTH,
+    });
+    rendition.hooks.content.register(onContent);
+    rendition.on("relocated", onRelocated);
+    rendition.on("keyup", onKey);
+    rendition.themes.fontSize(`${fontPct}%`);
   }
 
   // ---------- table of contents (chapter menu) ----------
@@ -149,6 +194,7 @@
     const b = e.target.closest(".toc-item");
     if (!b) return;
     setTocOpen(false);
+    spreadAnchor = null;
     rendition?.display(tocItems[b.dataset.i].href);
   });
   document.addEventListener("mousedown", (e) => {
@@ -171,7 +217,7 @@
     } catch (e) {
       console.warn("progress unavailable", e);
     }
-    updateProgress(rendition.currentLocation());
+    updateProgress(lastLocation);
   }
 
   function updateProgress(loc) {
@@ -183,6 +229,7 @@
   }
 
   function onRelocated(loc) {
+    lastLocation = loc;
     hideSelBtn();
     store.set(`pos:${bookName}`, loc.start.cfi);
     updateChapter(loc);
@@ -191,15 +238,18 @@
 
   // ---------- controls ----------
 
-  els.prev.addEventListener("click", () => rendition?.prev());
-  els.next.addEventListener("click", () => rendition?.next());
+  // Turning pages yourself ends the "same text as before switching one/two pages" memory.
+  const goPrev = () => { spreadAnchor = null; rendition?.prev(); };
+  const goNext = () => { spreadAnchor = null; rendition?.next(); };
+  els.prev.addEventListener("click", goPrev);
+  els.next.addEventListener("click", goNext);
 
   function onKey(e) {
     if (e.key === "Escape") { setTocOpen(false); return closePopover(); }
     if (!rendition || ["SELECT", "INPUT", "TEXTAREA"].includes(e.target?.tagName)) return;
     if (!els.tocMenu.hidden) return;
-    if (e.key === "ArrowLeft") rendition.prev();
-    if (e.key === "ArrowRight") rendition.next();
+    if (e.key === "ArrowLeft") goPrev();
+    if (e.key === "ArrowRight") goNext();
   }
   document.addEventListener("keyup", onKey);
 
@@ -224,6 +274,27 @@
     store.set("target", currentTarget);
     renderTarget();
     closePopover();
+  });
+
+  function renderSpread() {
+    document.body.classList.toggle("two-pages", twoPages);
+    els.spreadBtn.setAttribute("aria-pressed", String(twoPages));
+  }
+  els.spreadBtn.addEventListener("click", async () => {
+    twoPages = !twoPages;
+    store.set("spread", twoPages ? "2" : "1");
+    renderSpread();  // the page card gets wider/narrower via CSS
+    if (!rendition) return;
+    // Re-layouting in place makes epub.js jump to the start of the section (and save that position),
+    // so the view is rebuilt and opened at the text that was on screen.
+    const cfi = spreadAnchor || lastLocation?.start?.cfi || store.get(`pos:${bookName}`);
+    spreadAnchor = cfi;
+    closePopover();
+    hideSelBtn();
+    rendition.destroy();
+    els.viewer.innerHTML = "";
+    createRendition();
+    await displayAt(cfi);
   });
 
   function renderAutoplay() { els.autoplay.setAttribute("aria-pressed", String(autoplay)); }
@@ -272,6 +343,13 @@
       const link = doc.createElement("link");
       link.rel = "stylesheet";
       link.href = BOOK_FONT_URL;
+      // Resolves once Literata is really usable (or after 3 s / on error), see displayAt().
+      contents.rhFontReady = new Promise((resolve) => {
+        link.onload = () => Promise.all(["400 1em Literata", "italic 400 1em Literata", "600 1em Literata"]
+          .map((f) => doc.fonts.load(f))).then(resolve, resolve);
+        link.onerror = resolve;
+        setTimeout(resolve, 3000);
+      });
       doc.head.appendChild(link);
       const style = doc.createElement("style");
       style.id = "rh-book-css";
@@ -708,6 +786,7 @@
 
   // ---------- init ----------
   renderTarget();
+  renderSpread();
   renderAutoplay();
   setFont(fontPct);
   loadSavedWords().then(loadBookFromUrl);
