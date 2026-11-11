@@ -4,10 +4,11 @@
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    bookTitle: $("bookTitle"), toc: $("tocSelect"),
-    viewer: $("viewer"), prev: $("prev"), next: $("next"),
+    bookTitle: $("bookTitle"), tocBtn: $("tocBtn"), tocMenu: $("tocMenu"), tocList: $("tocList"),
+    chapter: $("chapterLabel"), pct: $("progressPct"), fill: $("progressFill"),
+    fontDown: $("fontDown"), fontUp: $("fontUp"), targetGroup: $("targetGroup"),
+    viewer: $("viewer"), prev: $("prev"), next: $("next"), vocabCount: $("vocabCount"),
     status: $("status"), popover: $("popover"), autoplay: $("autoplay"), selBtn: $("selBtn"),
-    target: $("targetSelect"),
   };
   // Popover labels in the chosen meaning language.
   const LABELS = {
@@ -15,9 +16,9 @@
     en: { tr: "English", gloss: "Meaning in this sentence", passage: "Translation", notes: "Notes" },
     de: { tr: "Deutsch", gloss: "Bedeutung in diesem Satz", passage: "Übersetzung", notes: "Hinweise" },
   };
-  const target = () => (LABELS[els.target.value] ? els.target.value : "vi");
   const MAX_PASSAGE_CHARS = 600;  // keep in sync with backend/main.py
   const MAX_PHRASE_WORDS = 4;     // longer selections are translated as a passage
+  const FONT_MIN = 70, FONT_MAX = 170, FONT_STEP = 10;  // text size in %
   let pendingSel = null;          // selection waiting for the Translate button
 
   const store = {
@@ -29,6 +30,11 @@
   let inflight = null;          // AbortController of the current /lookup
   let lookupSeq = 0;            // guards against late responses
   let savedWords = new Set();   // lowercase forms for highlighting
+  let currentTarget = LABELS[store.get("target")] ? store.get("target") : "vi";
+  let autoplay = store.get("autoplay") === "1";
+  let fontPct = Math.min(FONT_MAX, Math.max(FONT_MIN, Number(store.get("fontSize")) || 100));
+  let tocItems = [];            // flattened TOC: {label, href, depth, spineIndex}
+  const target = () => currentTarget;
 
   // ---------- book (from /read?book=<id>) ----------
 
@@ -39,6 +45,7 @@
       const r = await fetch(`/api/books/${encodeURIComponent(id)}`);
       if (r.status === 404) {
         els.viewer.innerHTML = `<p class="placeholder">This book is no longer in your library. <a href="/">Back to the library</a></p>`;
+        els.chapter.textContent = "Book not found";
         return;
       }
       const info = await r.json();
@@ -53,70 +60,233 @@
 
   async function openBook(info) {
     closePopover();
-    els.viewer.innerHTML = "";
     // Positions are stored per file name, so reading positions from before the library still work.
     bookName = info.filename;
-    setStatus("Opening book…");
+    els.viewer.innerHTML = "";  // remove the "Opening book…" placeholder, epub.js appends to the container
 
     book = ePub(info.file_url, { openAs: "epub" });
     rendition = book.renderTo(els.viewer, { width: "100%", height: "100%", flow: "paginated", spread: "none" });
-    rendition.themes.default({
-      body: { "line-height": "1.6 !important", cursor: "default" },
-      "::highlight(saved-word)": { "background-color": "#fde68a" },
-    });
     rendition.hooks.content.register(onContent);
     rendition.on("relocated", onRelocated);
     rendition.on("keyup", onKey);
+    rendition.themes.fontSize(`${fontPct}%`);
 
     try {
       await book.ready;
       bookLang = (book.packaging.metadata.language || "").slice(0, 2).toLowerCase();
       await rendition.display(store.get(`pos:${bookName}`) || undefined);
       els.prev.disabled = els.next.disabled = false;
-      buildToc();
+      await buildToc();
+      updateChapter(rendition.currentLocation());
+      setupProgress();  // may take a moment for long books; runs after the page is shown
     } catch (e) {
       console.error(e);
+      els.chapter.textContent = "Could not open the book";
       setStatus(`Could not open this EPUB: ${e.message || e}`);
     }
   }
 
+  // ---------- table of contents (chapter menu) ----------
+
   async function buildToc() {
     const nav = await book.loaded.navigation;
-    els.toc.length = 1;
+    tocItems = [];
     const add = (items, depth) => items.forEach((it) => {
-      els.toc.add(new Option(`${"  ".repeat(depth)}${it.label.trim()}`, it.href));
+      // The spine index tells which file (section) a TOC entry points into.
+      const section = book.spine.get(it.href.split("#")[0]) || book.spine.get(it.href);
+      tocItems.push({ label: it.label.trim(), href: it.href, depth, spineIndex: section ? section.index : -1 });
       if (it.subitems?.length) add(it.subitems, depth + 1);
     });
     add(nav.toc, 0);
-    els.toc.disabled = nav.toc.length === 0;
+    els.tocList.innerHTML = tocItems.length
+      ? tocItems.map((t, i) => `<button type="button" class="toc-item" data-i="${i}" style="padding-left:${14 + t.depth * 16}px">${esc(t.label)}</button>`).join("")
+      : `<p class="toc-empty">This book has no table of contents.</p>`;
   }
-  els.toc.addEventListener("change", () => { if (els.toc.value) rendition.display(els.toc.value); });
+
+  /** The chapter shown on this page: the last TOC entry that starts before the end of the page.
+   *  Several chapters can share one file (separated by #anchors), so anchors are compared by position. */
+  function chapterAt(loc) {
+    const idx = loc?.start?.index;
+    if (idx == null) return null;
+    let found = null;
+    for (const t of tocItems) {  // best guess from earlier files
+      if (t.spineIndex >= 0 && t.spineIndex < idx && (!found || t.spineIndex >= found.spineIndex)) found = t;
+    }
+    const doc = rendition.getContents().find((c) => c.sectionIndex === idx)?.document;
+    let pageEnd = null;
+    try { pageEnd = rendition.getRange(loc.end.cfi); } catch { /* fall back to "whole file" */ }
+    for (const t of tocItems) {
+      if (t.spineIndex !== idx) continue;
+      const frag = t.href.split("#")[1];
+      const el = frag && doc ? doc.getElementById(decodeURIComponent(frag)) : null;
+      if (!frag || !el || !pageEnd) { found = t; continue; }  // starts at the top of the file
+      const before = el.contains(pageEnd.startContainer) ||
+        (el.compareDocumentPosition(pageEnd.startContainer) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (before) found = t; else break;
+    }
+    return found;
+  }
+
+  function updateChapter(loc) {
+    const ch = chapterAt(loc);
+    const total = book?.spine?.length || 0;
+    els.chapter.textContent = ch ? ch.label : loc?.start ? `Section ${loc.start.index + 1} of ${total}` : "";
+    els.tocBtn.title = els.chapter.textContent;
+    els.tocList.querySelectorAll(".toc-item").forEach((b) => {
+      const on = ch && tocItems[b.dataset.i] === ch;
+      b.classList.toggle("current", !!on);
+      if (on) b.setAttribute("aria-current", "true"); else b.removeAttribute("aria-current");
+    });
+  }
+
+  function setTocOpen(open) {
+    els.tocMenu.hidden = !open;
+    els.tocBtn.setAttribute("aria-expanded", String(open));
+    if (open) (els.tocList.querySelector(".current") || els.tocList.querySelector("button"))?.focus();
+  }
+  els.tocBtn.addEventListener("click", () => setTocOpen(els.tocMenu.hidden));
+  els.tocList.addEventListener("click", (e) => {
+    const b = e.target.closest(".toc-item");
+    if (!b) return;
+    setTocOpen(false);
+    rendition?.display(tocItems[b.dataset.i].href);
+  });
+  document.addEventListener("mousedown", (e) => {
+    if (!els.tocMenu.hidden && !e.target.closest(".toc-wrap")) setTocOpen(false);
+  });
+
+  // ---------- progress ----------
+
+  /** Reading progress needs "locations" (positions spread through the book). Generating them reads the
+   *  whole book once, so they are cached per book in localStorage. */
+  async function setupProgress() {
+    const key = `loc:${bookName}`;
+    const saved = store.get(key);
+    try {
+      if (saved) book.locations.load(saved);
+      if (!book.locations.length()) {
+        await book.locations.generate(1200);
+        store.set(key, book.locations.save());
+      }
+    } catch (e) {
+      console.warn("progress unavailable", e);
+    }
+    updateProgress(rendition.currentLocation());
+  }
+
+  function updateProgress(loc) {
+    if (!loc?.start || !book?.locations?.length()) return;
+    const p = loc.atEnd ? 1 : book.locations.percentageFromCfi(loc.start.cfi);
+    const pct = Math.round(p * 100);
+    els.pct.textContent = `${pct}%`;
+    els.fill.style.width = `${pct}%`;
+  }
 
   function onRelocated(loc) {
     hideSelBtn();
     store.set(`pos:${bookName}`, loc.start.cfi);
-    const total = book.spine.length;
-    setStatus(`Section ${loc.start.index + 1} / ${total}` +
-      (loc.atEnd ? " · end of book" : ""));
+    updateChapter(loc);
+    updateProgress(loc);
   }
+
+  // ---------- controls ----------
 
   els.prev.addEventListener("click", () => rendition?.prev());
   els.next.addEventListener("click", () => rendition?.next());
 
   function onKey(e) {
-    if (e.key === "Escape") return closePopover();
-    if (!rendition || e.target?.tagName === "SELECT") return;
+    if (e.key === "Escape") { setTocOpen(false); return closePopover(); }
+    if (!rendition || ["SELECT", "INPUT", "TEXTAREA"].includes(e.target?.tagName)) return;
+    if (!els.tocMenu.hidden) return;
     if (e.key === "ArrowLeft") rendition.prev();
     if (e.key === "ArrowRight") rendition.next();
   }
   document.addEventListener("keyup", onKey);
 
-  function setStatus(msg) { els.status.textContent = msg; }
+  function setFont(pct) {
+    fontPct = Math.min(FONT_MAX, Math.max(FONT_MIN, pct));
+    store.set("fontSize", fontPct);
+    els.fontDown.disabled = fontPct <= FONT_MIN;
+    els.fontUp.disabled = fontPct >= FONT_MAX;
+    rendition?.themes.fontSize(`${fontPct}%`);
+  }
+  els.fontDown.addEventListener("click", () => setFont(fontPct - FONT_STEP));
+  els.fontUp.addEventListener("click", () => setFont(fontPct + FONT_STEP));
+
+  function renderTarget() {
+    els.targetGroup.querySelectorAll("[data-lang]").forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.lang === currentTarget)));
+  }
+  els.targetGroup.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-lang]");
+    if (!b) return;
+    currentTarget = b.dataset.lang;
+    store.set("target", currentTarget);
+    renderTarget();
+    closePopover();
+  });
+
+  function renderAutoplay() { els.autoplay.setAttribute("aria-pressed", String(autoplay)); }
+  els.autoplay.addEventListener("click", () => {
+    autoplay = !autoplay;
+    store.set("autoplay", autoplay ? "1" : "0");
+    renderAutoplay();
+  });
+
+  let statusTimer = null;
+  function setStatus(msg) {
+    els.status.textContent = msg;
+    els.status.hidden = !msg;
+    clearTimeout(statusTimer);
+    if (msg) statusTimer = setTimeout(() => { els.status.hidden = true; }, 6000);
+  }
+
+  // ---------- book typography + light/dark inside the book (iframe) ----------
+
+  const BOOK_FONT_URL = "https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&subset=vietnamese&display=swap";
+  // Our own stylesheet (instead of epub.js themes, which leave old theme rules in place when switching).
+  const BOOK_CSS = `
+    html { --rh-text:#22251f; --rh-link:#2d6a4f; --rh-hl:#dbeadb; --rh-ul:#2d6a4f; --rh-sel:#cfe3d4; }
+    html.rh-dark { --rh-text:#e7e3d9; --rh-link:#82c29e; --rh-hl:#2f4a39; --rh-ul:#82c29e; --rh-sel:#35503f; }
+    /* The iframe's colour scheme must match the page, or the browser paints an opaque white backdrop. */
+    html { background: transparent !important; color-scheme: light; }
+    html.rh-dark { color-scheme: dark; }
+    body { font-family: "Literata", Georgia, serif !important; color: var(--rh-text) !important;
+           background: transparent !important; line-height: 1.7 !important; cursor: default;
+           -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    p, li, blockquote, dd, dt, td, th, div, span, h1, h2, h3, h4, h5, h6 { font-family: inherit !important; }
+    h1, h2, h3, h4 { line-height: 1.25 !important; font-weight: 600 !important; letter-spacing: -0.01em; }
+    a { color: var(--rh-link) !important; }
+    ::selection { background: var(--rh-sel); }
+    ::highlight(saved-word) { background-color: var(--rh-hl); text-decoration: underline;
+                              text-decoration-color: var(--rh-ul); text-underline-offset: 3px; }
+    /* Dark: books often hard-code black text or white boxes, so neutralise them. */
+    html.rh-dark body * { color: inherit !important; background-color: transparent !important; }
+    html.rh-dark hr { border-color: #3a3d36 !important; }
+    html.rh-dark img { opacity: .92; }
+  `;
+
+  function styleContents(contents) {
+    const doc = contents.document;
+    if (!doc.getElementById("rh-book-css")) {
+      const link = doc.createElement("link");
+      link.rel = "stylesheet";
+      link.href = BOOK_FONT_URL;
+      doc.head.appendChild(link);
+      const style = doc.createElement("style");
+      style.id = "rh-book-css";
+      style.textContent = BOOK_CSS;
+      doc.head.appendChild(style);
+    }
+    doc.documentElement.classList.toggle("rh-dark", window.RHTheme?.current === "dark");
+  }
+  window.RHTheme?.onChange(() => rendition?.getContents().forEach(styleContents));
 
   // ---------- per-chapter content hook ----------
 
   function onContent(contents) {
     const doc = contents.document;
+    styleContents(contents);
     doc.addEventListener("click", (e) => onDocClick(e, doc));
     doc.addEventListener("keyup", (e) => {
       if (e.key === "Escape") { closePopover(); hideSelBtn(); }
@@ -365,7 +535,7 @@
 
     renderPopover(state, "loading");
     positionPopover(anchor);
-    if (els.autoplay.checked && hintLang) speak(word, hintLang);
+    if (autoplay && hintLang) speak(word, hintLang);
 
     try {
       const r = await fetch("/lookup", {
@@ -379,7 +549,7 @@
       if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : `Server error (${r.status})`);
       state.data = data;
       state.lang = data.lang;
-      if (els.autoplay.checked && !hintLang) speak(word, data.lang);
+      if (autoplay && !hintLang) speak(word, data.lang);
       renderPopover(state, "done");
     } catch (e) {
       if (e.name === "AbortError" || seq !== lookupSeq) return;
@@ -499,6 +669,7 @@
       btn.textContent = "Saved ✓";
       savedWords.add(d.word.toLowerCase());
       rendition?.getContents().forEach(highlightSaved);
+      loadSavedWords();  // refresh the vocabulary count
     } catch {
       btn.disabled = false;
       btn.textContent = "Save failed – retry";
@@ -509,7 +680,9 @@
     try {
       const items = await (await fetch("/api/vocab")).json();
       savedWords = new Set(items.map((v) => v.word.toLowerCase()));
-    } catch { /* highlighting is optional */ }
+      els.vocabCount.textContent = items.length;
+      els.vocabCount.hidden = items.length === 0;
+    } catch { /* highlighting and the count are optional */ }
   }
 
   /** Highlight saved words with the CSS Custom Highlight API (no DOM changes, so CFIs stay valid). */
@@ -534,9 +707,8 @@
   }
 
   // ---------- init ----------
-  els.autoplay.checked = store.get("autoplay") === "1";
-  els.target.value = LABELS[store.get("target")] ? store.get("target") : "vi";
-  els.target.addEventListener("change", () => { store.set("target", target()); closePopover(); });
-  els.autoplay.addEventListener("change", () => store.set("autoplay", els.autoplay.checked ? "1" : "0"));
+  renderTarget();
+  renderAutoplay();
+  setFont(fontPct);
   loadSavedWords().then(loadBookFromUrl);
 })();
