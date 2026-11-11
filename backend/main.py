@@ -4,6 +4,7 @@ import csv
 import io
 import logging
 import re
+import unicodedata
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -194,6 +195,25 @@ def save_vocab(item: VocabIn):
 @app.get("/api/vocab")
 def get_vocab():
     return db.list_vocab()
+
+
+class VocabUpdate(BaseModel):
+    translation_vi: str | None = Field(None, max_length=500)
+    gloss_vi: str | None = Field(None, max_length=1000)
+    sentence: str | None = Field(None, min_length=1, max_length=2000)
+
+
+@app.patch("/api/vocab/{vocab_id}")
+def edit_vocab(vocab_id: int, changes: VocabUpdate):
+    # Only fields that were sent are changed; text is trimmed and normalised to NFC like model output.
+    fields = {k: unicodedata.normalize("NFC", v.strip())
+              for k, v in changes.model_dump(exclude_none=True).items()}
+    if fields.get("sentence") == "":
+        raise HTTPException(400, "The sentence can't be empty.")
+    row = db.update_vocab(vocab_id, fields)
+    if row is None:
+        raise HTTPException(404, "Not found")
+    return row
 
 
 @app.delete("/api/vocab/{vocab_id}")

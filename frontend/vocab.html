@@ -28,31 +28,109 @@
   <script>
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const rows = document.getElementById("rows");
+    let items = [];
 
-    async function load() {
-      const rows = document.getElementById("rows");
-      let items = [];
-      try { items = await (await fetch("/api/vocab")).json(); }
-      catch { rows.innerHTML = `<tr><td colspan="6" class="error">Could not load vocabulary.</td></tr>`; return; }
-      document.getElementById("count").textContent = `Saved words (${items.length})`;
-      document.getElementById("empty").hidden = items.length > 0;
-      rows.innerHTML = items.map((v) => `
-        <tr>
-          <td><strong>${esc(v.word)}</strong>${v.lemma && v.lemma.toLowerCase() !== v.word.toLowerCase() ? `<br><small>${esc(v.lemma)}</small>` : ""}</td>
-          <td>${esc(v.lang)}</td>
-          <td><strong>${esc(v.translation_vi)}</strong><br>${esc(v.gloss_vi)}</td>
-          <td class="sent">${esc(v.sentence)}</td>
-          <td><small>${esc(new Date(v.created_at).toLocaleDateString())}</small></td>
-          <td><button data-id="${v.id}" title="Delete">Delete</button></td>
-        </tr>`).join("");
+    function wordCell(v) {
+      return `<strong>${esc(v.word)}</strong>` +
+        (v.lemma && v.lemma.toLowerCase() !== v.word.toLowerCase() ? `<br><small>${esc(v.lemma)}</small>` : "");
     }
 
-    document.getElementById("rows").addEventListener("click", async (e) => {
-      const id = e.target.dataset?.id;
-      if (!id || !confirm("Delete this word?")) return;
-      const r = await fetch(`/api/vocab/${id}`, { method: "DELETE" });
-      if (r.ok) load(); else alert("Delete failed.");
+    function viewRow(v) {
+      return `<tr data-id="${v.id}">
+        <td>${wordCell(v)}</td>
+        <td>${esc(v.lang)}</td>
+        <td><strong>${esc(v.translation_vi)}</strong><br>${esc(v.gloss_vi)}</td>
+        <td class="sent">${esc(v.sentence)}</td>
+        <td><small>${esc(new Date(v.created_at).toLocaleDateString())}</small></td>
+        <td class="row-actions">
+          <button data-act="edit">Edit</button>
+          <button data-act="delete" title="Delete">Delete</button>
+        </td>
+      </tr>`;
+    }
+
+    function editRow(v) {
+      return `<tr data-id="${v.id}" class="editing">
+        <td>${wordCell(v)}</td>
+        <td>${esc(v.lang)}</td>
+        <td>
+          <input name="translation_vi" value="${esc(v.translation_vi)}" placeholder="Tiếng Việt" aria-label="Vietnamese translation">
+          <textarea name="gloss_vi" rows="3" placeholder="Giải thích" aria-label="Vietnamese explanation">${esc(v.gloss_vi)}</textarea>
+        </td>
+        <td><textarea name="sentence" rows="4" aria-label="Sentence">${esc(v.sentence)}</textarea></td>
+        <td><small>${esc(new Date(v.created_at).toLocaleDateString())}</small></td>
+        <td class="row-actions">
+          <button data-act="save" class="primary">Save</button>
+          <button data-act="cancel">Cancel</button>
+          <div class="row-error error" hidden></div>
+        </td>
+      </tr>`;
+    }
+
+    function render() {
+      document.getElementById("count").textContent = `Saved words (${items.length})`;
+      document.getElementById("empty").hidden = items.length > 0;
+      rows.innerHTML = items.map(viewRow).join("");
+    }
+
+    async function load() {
+      try { items = await (await fetch("/api/vocab")).json(); }
+      catch { rows.innerHTML = `<tr><td colspan="6" class="error">Could not load vocabulary.</td></tr>`; return; }
+      render();
+    }
+
+    const byId = (id) => items.find((v) => String(v.id) === String(id));
+
+    async function save(tr) {
+      const id = tr.dataset.id;
+      const body = {};
+      tr.querySelectorAll("[name]").forEach((el) => { body[el.name] = el.value; });
+      const err = tr.querySelector(".row-error");
+      if (!body.sentence.trim()) { err.textContent = "The sentence can't be empty."; err.hidden = false; return; }
+      tr.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+      try {
+        const r = await fetch(`/api/vocab/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Save failed.");
+        items[items.indexOf(byId(id))] = data;
+        tr.outerHTML = viewRow(data);
+      } catch (e) {
+        err.textContent = e.message; err.hidden = false;
+        tr.querySelectorAll("button").forEach((b) => { b.disabled = false; });
+      }
+    }
+
+    rows.addEventListener("click", async (e) => {
+      const act = e.target.dataset?.act;
+      const tr = e.target.closest("tr");
+      if (!act || !tr) return;
+      const v = byId(tr.dataset.id);
+      if (act === "edit") {
+        tr.outerHTML = editRow(v);
+        rows.querySelector(`tr[data-id="${v.id}"] [name="translation_vi"]`).focus();
+      }
+      if (act === "cancel") tr.outerHTML = viewRow(v);
+      if (act === "save") save(tr);
+      if (act === "delete") {
+        if (!confirm("Delete this word?")) return;
+        const r = await fetch(`/api/vocab/${v.id}`, { method: "DELETE" });
+        if (r.ok) { items = items.filter((x) => x !== v); render(); } else alert("Delete failed.");
+      }
     });
+
+    // Keyboard: Ctrl/Cmd+Enter saves, Esc cancels while editing.
+    rows.addEventListener("keydown", (e) => {
+      const tr = e.target.closest("tr.editing");
+      if (!tr) return;
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(tr); }
+      if (e.key === "Escape") tr.outerHTML = viewRow(byId(tr.dataset.id));
+    });
+
     load();
   </script>
 </body>

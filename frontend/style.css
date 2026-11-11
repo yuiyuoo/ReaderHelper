@@ -87,4 +87,14 @@ table { width: 100%; border-collapse: collapse; background: var(--panel); }
 th, td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--border); font-size: 14px; }
 th { font-size: 12px; text-transform: uppercase; color: var(--muted); }
 td.sent { color: var(--muted); max-width: 360px; }
+td.row-actions { white-space: nowrap; }
+td.row-actions button + button { margin-left: 4px; }
+tr.editing td { background: #f6f9fd; }
+tr.editing input, tr.editing textarea {
+  display: block; width: 100%; font: inherit; font-size: 14px; padding: 4px 6px; margin-bottom: 4px;
+  border: 1px solid var(--border); border-radius: 4px; resize: vertical;
+}
+tr.editing input:focus, tr.editing textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.row-error { white-space: normal; font-size: 12px; margin-top: 4px; max-width: 160px; }
 .empty { color: var(--muted); padding: 24px; text-align: center; }

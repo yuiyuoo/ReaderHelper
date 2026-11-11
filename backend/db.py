@@ -96,6 +96,20 @@ def list_vocab() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+EDITABLE_VOCAB_FIELDS = ("translation_vi", "gloss_vi", "sentence")
+
+
+def update_vocab(vocab_id: int, changes: dict) -> dict | None:
+    """Update the editable fields given in `changes`; return the updated row, or None if not found."""
+    fields = {k: v for k, v in changes.items() if k in EDITABLE_VOCAB_FIELDS}
+    with _conn() as conn:
+        if fields:
+            sets = ", ".join(f"{k}=?" for k in fields)  # keys come from the whitelist above
+            conn.execute(f"UPDATE vocab SET {sets} WHERE id=?", (*fields.values(), vocab_id))
+        row = conn.execute("SELECT * FROM vocab WHERE id=?", (vocab_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def delete_vocab(vocab_id: int) -> bool:
     with _conn() as conn:
         cur = conn.execute("DELETE FROM vocab WHERE id=?", (vocab_id,))
