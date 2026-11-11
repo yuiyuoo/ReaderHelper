@@ -44,7 +44,14 @@ uvicorn backend.main:app --reload
 
 Open http://localhost:8000.
 
-- **Books:** put `.epub` files in `books/`, or use **Upload**. The reader remembers your position for each book.
+- **Library (home page):** shows your books as covers, most recently opened first. Click a cover to read.
+  - **Add book** (or drag an EPUB onto the page): the app reads the title, author and cover picture from
+    the EPUB. A dialog lets you change the **name shown in the library**, choose your own **picture**
+    (JPG/PNG/GIF/WebP, max. 5 MB) or use the **default icon**. *Cancel upload* removes the book again.
+  - The ✎ button on each book edits name, author and picture, or removes the book (the EPUB file is
+    deleted; saved words stay).
+  - `.epub` files copied into `books/` by hand appear automatically. Cover pictures are stored in `covers/`.
+- **Reader:** opens at `/read?book=<id>`; **‹ Library** goes back. It remembers your position for each book.
 - **Navigation:** use the ‹ › buttons, the ← → keys, or the Contents menu.
 - **Look up a word:** click it. Close the popover with Esc or by clicking outside it.
   The first lookup can take a while because the model has to load.

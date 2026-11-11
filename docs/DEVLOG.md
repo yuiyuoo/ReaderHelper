@@ -286,6 +286,46 @@ had to load).
 
 ---
 
+## Part 7: Library home page
+
+### 25. Books were only a file-name dropdown
+- **Request:** a home page showing the books; when uploading, give the book a display name and, if
+  possible, a picture, otherwise a default icon. Ideas came from the design canvas
+  "ReaderHelper UI" (reader screens only, no home page). Its palette, book font and 44 px controls
+  were taken over for the whole app.
+- **Fix:**
+  - New `books` table (file name, title, author, language, cover, added/opened time) and
+    `backend/books.py`, which reads title, author, language and the **embedded cover** straight from
+    the EPUB. EPUB 3 `cover-image`, EPUB 2 `<meta name="cover">`, or an image named "cover" all work,
+    so most books get a picture without uploading one.
+  - Library API: list (syncs with `books/`: hand-copied files appear, missing files disappear),
+    upload, rename (`PATCH`), cover upload/remove, "opened" timestamp, delete.
+  - **Home page** (`/`): cover grid sorted by last opened, language tag, "Opened 2 days ago",
+    ✎ edit button, "Add book" card, drag & drop, empty state. Books without a picture get a coloured
+    tile with a book icon and the title; the colour is derived from the title, so it stays the same.
+  - **Add/edit dialog:** name (prefilled from the EPUB), author, picture preview. The picture is only
+    uploaded on Save, so Cancel really cancels; *Cancel upload* removes a just-added book again.
+  - **Reader** moved to `/read?book=<id>` with a "‹ Library" link and the book's name. Reading
+    positions are still stored per file name, so positions from before the library are kept.
+  - Safety: uploaded pictures are checked by their content (not the file name), max. 5 MB; uploads
+    never overwrite another book's file; book and cover paths can't escape their folders. Cover files
+    get a new name on every change, so browsers can cache them forever without showing old pictures.
+
+### 26. Drop hint covered the whole page
+- **Problem:** the "Drop the EPUB to add it" overlay was always visible.
+- **Cause:** a CSS rule `display: flex` overrides the browser's built-in `[hidden] { display: none }`.
+- **Fix:** a global `[hidden] { display: none !important; }`, so this can't happen to any element.
+
+- **Tested in the browser:** upload → prefilled dialog (title and author from the EPUB) → rename → default
+  icon → add; edit → own picture; cancel upload; open book → reader → back ("Opened just now", first in
+  the list); remove book; unknown book id; phone width. API: non-EPUB upload, non-image cover, empty
+  title, path tricks → all rejected.
+
+  *Files:* `backend/books.py` (new), `backend/db.py`, `backend/main.py`, `frontend/library.html` (new),
+  `frontend/library.js` (new), `frontend/index.html`, `frontend/reader.js`, `frontend/style.css`, `.gitignore`
+
+---
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
