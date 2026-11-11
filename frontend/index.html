@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ReaderHelper</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%232f6fb3'/%3E%3Cpath d='M4 4h3.5a1.5 1.5 0 0 1 1.5 1.5V12H5.5A1.5 1.5 0 0 1 4 10.5z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,600;1,400&subset=vietnamese&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="toolbar">
+    <strong class="brand">ReaderHelper</strong>
+    <select id="bookSelect" title="Books in /books"><option value="">— choose a book —</option></select>
+    <label class="btn" title="Upload an EPUB">Upload<input id="upload" type="file" accept=".epub,application/epub+zip" hidden></label>
+    <select id="tocSelect" title="Table of contents" disabled><option value="">Contents</option></select>
+    <span class="spacer"></span>
+    <label class="check"><input id="autoplay" type="checkbox"> Auto-play audio</label>
+    <a class="btn" href="/vocab">Vocabulary</a>
+  </header>
+
+  <main class="reader">
+    <button id="prev" class="nav" title="Previous page (←)" disabled>‹</button>
+    <div id="viewer"><p class="placeholder">Choose a book from <code>/books</code> or upload an EPUB. Click any word to look it up.</p></div>
+    <button id="next" class="nav" title="Next page (→)" disabled>›</button>
+  </main>
+  <footer id="status" class="status"></footer>
+
+  <div id="popover" class="popover" hidden role="dialog" aria-live="polite"></div>
+  <button id="selBtn" class="sel-btn" hidden title="Translate the selected text">Dịch · Translate</button>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
+  <script src="/static/reader.js"></script>
+</body>
+</html>
