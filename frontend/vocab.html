@@ -20,7 +20,7 @@
   <div class="page">
     <h2 id="count">Saved words</h2>
     <table>
-      <thead><tr><th>Word</th><th>Lang</th><th>Tiếng Việt</th><th>Sentence</th><th>Saved</th><th></th></tr></thead>
+      <thead><tr><th>Words</th><th>Notes</th><th>Sentence</th><th>Saved</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <div id="empty" class="empty" hidden>No saved words yet. Click a word while reading and press “Save word”.</div>
@@ -32,15 +32,14 @@
     let items = [];
 
     function wordCell(v) {
-      return `<strong>${esc(v.word)}</strong>` +
+      return `<strong>${esc(v.word)}</strong> <span class="lang-tag">${esc(v.lang)}</span>` +
         (v.lemma && v.lemma.toLowerCase() !== v.word.toLowerCase() ? `<br><small>${esc(v.lemma)}</small>` : "");
     }
 
     function viewRow(v) {
       return `<tr data-id="${v.id}">
         <td>${wordCell(v)}</td>
-        <td>${esc(v.lang)}</td>
-        <td><strong>${esc(v.translation_vi)}</strong><br>${esc(v.gloss_vi)}</td>
+        <td class="notes-cell"><strong>${esc(v.translation_vi)}</strong><br>${esc(v.gloss_vi)}</td>
         <td class="sent">${esc(v.sentence)}</td>
         <td><small>${esc(new Date(v.created_at).toLocaleDateString())}</small></td>
         <td class="row-actions">
@@ -53,8 +52,7 @@
     function editRow(v) {
       return `<tr data-id="${v.id}" class="editing">
         <td>${wordCell(v)}</td>
-        <td>${esc(v.lang)}</td>
-        <td>
+        <td class="notes-cell">
           <input name="translation_vi" value="${esc(v.translation_vi)}" placeholder="Tiếng Việt" aria-label="Vietnamese translation">
           <textarea name="gloss_vi" rows="3" placeholder="Giải thích" aria-label="Vietnamese explanation">${esc(v.gloss_vi)}</textarea>
         </td>
@@ -76,7 +74,7 @@
 
     async function load() {
       try { items = await (await fetch("/api/vocab")).json(); }
-      catch { rows.innerHTML = `<tr><td colspan="6" class="error">Could not load vocabulary.</td></tr>`; return; }
+      catch { rows.innerHTML = `<tr><td colspan="5" class="error">Could not load vocabulary.</td></tr>`; return; }
       render();
     }
 

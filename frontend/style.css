@@ -88,6 +88,9 @@ th, td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px
 th { font-size: 12px; text-transform: uppercase; color: var(--muted); }
 td.sent { color: var(--muted); max-width: 360px; }
 td.row-actions { white-space: nowrap; }
+td.notes-cell { min-width: 220px; }
+tbody td:first-child { min-width: 150px; }
+.lang-tag { font-size: 11px; text-transform: uppercase; background: #eef3fa; color: var(--accent); padding: 0 5px; border-radius: 4px; vertical-align: 1px; }
 td.row-actions button + button { margin-left: 4px; }
 tr.editing td { background: #f6f9fd; }
 tr.editing input, tr.editing textarea {
