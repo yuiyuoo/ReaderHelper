@@ -54,7 +54,9 @@ Open http://localhost:8000.
     translation, meaning in this sentence, and **Save word**, so phrases can go into your vocabulary.
   - **Longer selections** (up to about 600 characters, 3–4 sentences) get a natural Vietnamese translation
     plus up to 3 notes on difficult words. 🔊 reads the original text aloud. This takes about 10–20 s.
-- **Vocabulary:** the **Vocabulary** page lists saved words. **Export CSV (Anki)** downloads a file where
+- **Vocabulary:** the **Vocabulary** page lists saved words. **Edit** lets you fix the Vietnamese translation,
+  the explanation, or shorten the sentence (Ctrl+Enter saves, Esc cancels). This is useful when the model got
+  a word wrong. **Export CSV (Anki)** downloads a file where
   front = word + sentence and back = translation + explanation. In Anki, choose *File → Import*.
   The file's header lines tell Anki that it's comma-separated and contains HTML.
 - Saved words are highlighted in the text (Chrome/Edge 105+, Firefox 140+, Safari 17.2+).

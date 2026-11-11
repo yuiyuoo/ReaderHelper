@@ -233,6 +233,27 @@ had to load).
 
 ---
 
+## Part 5: Editing saved words
+
+### 23. Saved words couldn't be corrected
+- **Problem:** wrong model answers ended up in the vocabulary and the Anki export. Example from real use:
+  *"Die Katze **fing** die Maus"* was saved as "ngón tay" (finger), although *fing* is a form of *fangen*
+  (to catch). The only option was to delete the word.
+- **Fix:**
+  - New endpoint `PATCH /api/vocab/{id}`. It changes only the fields that are sent, and only
+    `translation_vi`, `gloss_vi` and `sentence` are allowed (a whitelist). Text is trimmed and normalised
+    to NFC. An empty sentence is rejected (400); an unknown id returns 404.
+  - Vocabulary page: **Edit** turns the row into input fields with Save and Cancel. Ctrl+Enter saves and
+    Esc cancels. Errors appear inside the row.
+  - Word and lemma can't be edited, because they come from the book. Fix a wrong lemma by deleting the
+    entry and saving the word again.
+- **Tested:** partial update, empty sentence, unknown id, editing in the browser, persistence after reload,
+  Esc, Ctrl+Enter, and the CSV export containing the edited text.
+
+  *Files:* `backend/db.py` (`update_vocab`), `backend/main.py`, `frontend/vocab.html`, `frontend/style.css`
+
+---
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
@@ -250,10 +271,10 @@ had to load).
 ## Still open (ideas)
 - Test larger models with `tools/eval_words.py` (`qwen3:8b`, `gemma3:12b`) and pick a new default.
 - Show the dictionary result immediately and add the Vietnamese when it arrives (lookups currently take 6–11 s).
-- Save translated passages (currently only words and phrases can be saved).
-- Since sentence translation works better than single-word lookup, the word popover could also show a
-  translation of the whole sentence for comparison.
+- Look up phrases and idioms by drag-selecting several words.
 - Better German lemmas (`de_core_news_md`); the small model gives e.g. *ungeheueren* → "ungeheu".
-- Vocabulary: remember where in the book each word was saved and link back; edit entries; built-in review mode.
+- Vocabulary: remember where in the book each word was saved and link back; built-in review mode.
+- German past-tense forms like *fing* aren't lemmatized (should be *fangen*), so dictionary and translation
+  miss. A larger spaCy model or a dictionary fallback for irregular verbs would help.
 - Reader: font size, themes (sepia/dark), progress %, scroll mode, touch support.
 - Unit tests for sentence extraction, lemmatization and JSON parsing.
