@@ -51,7 +51,14 @@ Open http://localhost:8000.
   - The ✎ button on each book edits name, author and picture, or removes the book (the EPUB file is
     deleted; saved words stay).
   - `.epub` files copied into `books/` by hand appear automatically. Cover pictures are stored in `covers/`.
-- **Reader:** opens at `/read?book=<id>`; **‹ Library** goes back. It remembers your position for each book.
+- **Reader:** opens at `/read?book=<id>`; **‹** goes back to the library. It remembers your position for each book.
+  - Top bar: **chapter menu** (current chapter name, click for the table of contents), **reading progress**
+    in %, **A− / A+** text size, **Meaning VI / EN / DE**, auto-play audio, light/dark switch, vocabulary.
+  - The book is shown as a centred page in Literata; ‹ › or the arrow keys turn pages.
+  - The first time a book is opened, the progress takes a few seconds to appear (the app measures the book
+    once and remembers it).
+- **Dark mode:** the sun/moon button on every page. Without a choice, the app follows your system setting.
+  The book's own colours are overridden in dark mode so the text is always readable.
 - **Navigation:** use the ‹ › buttons, the ← → keys, or the Contents menu.
 - **Look up a word:** click it. Close the popover with Esc or by clicking outside it.
   The first lookup can take a while because the model has to load.

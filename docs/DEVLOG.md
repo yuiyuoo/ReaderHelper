@@ -326,6 +326,48 @@ had to load).
 
 ---
 
+## Part 8: New reading view + dark mode
+
+### 27. Reading view redesign
+- **Request:** a reading view like the user's mock-up (slim top bar with chapter menu, progress %, A−/A+,
+  warm paper background, centred page in a serif font) plus dark mode.
+- **Fix:**
+  - Top bar: back to library, **chapter menu** (current chapter as its label, table of contents as a
+    dropdown with the current entry highlighted), **progress** (% + bar), **A−/A+** (70–170 %, remembered),
+    **Meaning VI/EN/DE** as a segmented switch, auto-play as a toggle button, light/dark switch,
+    vocabulary with a count badge.
+  - The book sits in a centred "page card" (max. 820 px); text in Literata, line height 1.7. Messages
+    appear as a short toast instead of a permanent status line.
+  - **Progress** needs epub.js "locations" (positions spread through the whole book). Generating them
+    reads the book once, which takes a few seconds for long books, so they are cached per book in
+    localStorage and generated after the first page is already visible.
+  - The palette changed to the warm paper colours of the mock-up; every colour is now a CSS variable.
+  *Files:* `frontend/index.html`, `frontend/reader.js`, `frontend/style.css`
+
+### 28. Dark mode
+- `frontend/theme.js` (loaded in `<head>` so there is no flash of the wrong theme) sets `data-theme` on
+  every page. It follows the system setting until the user picks light or dark with the sun/moon button.
+  The choice is remembered.
+- A second set of colour variables for `[data-theme="dark"]`. All hard-coded colours (`#fff` buttons,
+  input borders, dashed borders…) were replaced by variables so nothing stays light.
+- **Inside the book** (an iframe), the app injects its own stylesheet and toggles a class `rh-dark`. In dark
+  mode it overrides the book's own text and background colours, which are often hard-coded black/white.
+
+### 29. Problems found while testing the new view
+| Problem | Cause | Fix |
+| --- | --- | --- |
+| "Opening book…" stayed on the page and pushed the book out of the card | epub.js adds its view to the container without clearing it | Clear the container before rendering |
+| Chapter label stuck on "1. …" after jumping to chapter 2 | Several chapters share one file (separated by `#anchors`); the code only compared files | Compare each chapter anchor's position with the end of the shown page |
+| Book stayed white in dark mode, even with a transparent background | When the page uses `color-scheme: dark` and the iframe doesn't, the browser paints an opaque white backdrop behind the iframe | Give the book's document the same `color-scheme` |
+| epub.js themes not used | Switching epub.js themes leaves the old theme's rules in the document | Own stylesheet + class toggle |
+| Vocabulary page said "Back to reader" but went to the library | Leftover label | Renamed to "← Library" |
+
+- **Tested in the browser:** chapter label + menu (88 entries, jump updates label and progress), progress
+  (1 % → 6 %), text size, meaning switch, dark mode in page and book (text colour checked), theme kept
+  after reload, library and vocabulary in dark mode, phone width. No script errors.
+
+---
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
