@@ -4,7 +4,7 @@
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    bookSelect: $("bookSelect"), upload: $("upload"), toc: $("tocSelect"),
+    bookTitle: $("bookTitle"), toc: $("tocSelect"),
     viewer: $("viewer"), prev: $("prev"), next: $("next"),
     status: $("status"), popover: $("popover"), autoplay: $("autoplay"), selBtn: $("selBtn"),
     target: $("targetSelect"),
@@ -30,52 +30,35 @@
   let lookupSeq = 0;            // guards against late responses
   let savedWords = new Set();   // lowercase forms for highlighting
 
-  // ---------- books ----------
+  // ---------- book (from /read?book=<id>) ----------
 
-  async function loadBookList(selectName) {
+  async function loadBookFromUrl() {
+    const id = new URLSearchParams(location.search).get("book");
+    if (!id) { location.replace("/"); return; }
     try {
-      const names = await (await fetch("/api/books")).json();
-      els.bookSelect.length = 1;
-      for (const n of names) els.bookSelect.add(new Option(n, n));
-      const want = selectName || store.get("lastBook");
-      if (want && names.includes(want)) {
-        els.bookSelect.value = want;
-        openBook(want);
+      const r = await fetch(`/api/books/${encodeURIComponent(id)}`);
+      if (r.status === 404) {
+        els.viewer.innerHTML = `<p class="placeholder">This book is no longer in your library. <a href="/">Back to the library</a></p>`;
+        return;
       }
+      const info = await r.json();
+      els.bookTitle.textContent = info.title;
+      document.title = `${info.title} · ReaderHelper`;
+      fetch(`/api/books/${info.id}/opened`, { method: "POST" }).catch(() => {});
+      openBook(info);
     } catch {
-      setStatus("Could not load the book list from the server.");
+      setStatus("Could not reach the ReaderHelper server.");
     }
   }
 
-  els.bookSelect.addEventListener("change", () => els.bookSelect.value && openBook(els.bookSelect.value));
-
-  els.upload.addEventListener("change", async () => {
-    const file = els.upload.files[0];
-    if (!file) return;
-    const fd = new FormData();
-    fd.append("file", file);
-    setStatus("Uploading…");
-    try {
-      const r = await fetch("/api/books", { method: "POST", body: fd });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || "Upload failed");
-      await loadBookList(data.name);
-    } catch (e) {
-      setStatus(`Upload failed: ${e.message}`);
-    }
-    els.upload.value = "";
-  });
-
-  async function openBook(name) {
+  async function openBook(info) {
     closePopover();
-    if (rendition) rendition.destroy();
-    if (book) book.destroy();
     els.viewer.innerHTML = "";
-    bookName = name;
-    store.set("lastBook", name);
+    // Positions are stored per file name, so reading positions from before the library still work.
+    bookName = info.filename;
     setStatus("Opening book…");
 
-    book = ePub(`/books/${encodeURIComponent(name)}`, { openAs: "epub" });
+    book = ePub(info.file_url, { openAs: "epub" });
     rendition = book.renderTo(els.viewer, { width: "100%", height: "100%", flow: "paginated", spread: "none" });
     rendition.themes.default({
       body: { "line-height": "1.6 !important", cursor: "default" },
@@ -88,7 +71,7 @@
     try {
       await book.ready;
       bookLang = (book.packaging.metadata.language || "").slice(0, 2).toLowerCase();
-      await rendition.display(store.get(`pos:${name}`) || undefined);
+      await rendition.display(store.get(`pos:${bookName}`) || undefined);
       els.prev.disabled = els.next.disabled = false;
       buildToc();
     } catch (e) {
@@ -113,7 +96,7 @@
     hideSelBtn();
     store.set(`pos:${bookName}`, loc.start.cfi);
     const total = book.spine.length;
-    setStatus(`${bookName} · section ${loc.start.index + 1} / ${total}` +
+    setStatus(`Section ${loc.start.index + 1} / ${total}` +
       (loc.atEnd ? " · end of book" : ""));
   }
 
@@ -555,5 +538,5 @@
   els.target.value = LABELS[store.get("target")] ? store.get("target") : "vi";
   els.target.addEventListener("change", () => { store.set("target", target()); closePopover(); });
   els.autoplay.addEventListener("change", () => store.set("autoplay", els.autoplay.checked ? "1" : "0"));
-  loadSavedWords().then(() => loadBookList());
+  loadSavedWords().then(loadBookFromUrl);
 })();

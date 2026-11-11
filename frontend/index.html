@@ -4,17 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ReaderHelper</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%232f6fb3'/%3E%3Cpath d='M4 4h3.5a1.5 1.5 0 0 1 1.5 1.5V12H5.5A1.5 1.5 0 0 1 4 10.5z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230f6b5c'/%3E%3Cpath d='M4 4h3.5a1.5 1.5 0 0 1 1.5 1.5V12H5.5A1.5 1.5 0 0 1 4 10.5z' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,600;1,400&subset=vietnamese&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,600;1,400&family=Literata:opsz,wght@7..72,600&subset=vietnamese&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header class="toolbar">
-    <strong class="brand">ReaderHelper</strong>
-    <select id="bookSelect" title="Books in /books"><option value="">— choose a book —</option></select>
-    <label class="btn" title="Upload an EPUB">Upload<input id="upload" type="file" accept=".epub,application/epub+zip" hidden></label>
+    <a class="btn" href="/" title="Back to your library">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 4L6 8l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Library
+    </a>
+    <strong id="bookTitle" class="book-heading"></strong>
     <select id="tocSelect" title="Table of contents" disabled><option value="">Contents</option></select>
     <span class="spacer"></span>
     <label class="check" title="Language of the meaning and translations">Meaning in
@@ -30,7 +32,7 @@
 
   <main class="reader">
     <button id="prev" class="nav" title="Previous page (←)" disabled>‹</button>
-    <div id="viewer"><p class="placeholder">Choose a book from <code>/books</code> or upload an EPUB. Click any word to look it up.</p></div>
+    <div id="viewer"><p class="placeholder">Opening book…</p></div>
     <button id="next" class="nav" title="Next page (→)" disabled>›</button>
   </main>
   <footer id="status" class="status"></footer>
