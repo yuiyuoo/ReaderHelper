@@ -55,6 +55,9 @@ Open http://localhost:8000.
   - Top bar: **chapter menu** (current chapter name, click for the table of contents), **reading progress**
     in %, **A− / A+** text size, **Meaning VI / EN / DE**, auto-play audio, light/dark switch, vocabulary.
   - The book is shown as a centred page in Literata; ‹ › or the arrow keys turn pages.
+  - **Two pages side by side** (open-book button next to A+): left and right page like a real book, with a
+    fold in the middle; ‹ › turn two pages at once. Remembered; on narrow screens it stays one page.
+    Switching keeps you at the same text.
   - The first time a book is opened, the progress takes a few seconds to appear (the app measures the book
     once and remembers it).
 - **Dark mode:** the sun/moon button on every page. Without a choice, the app follows your system setting.

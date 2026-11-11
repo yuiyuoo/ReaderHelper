@@ -368,6 +368,36 @@ had to load).
 
 ---
 
+## Part 9: Two pages side by side
+
+### 30. Book-like double page
+- **Request:** optionally show two pages next to each other, like an open book.
+- **Fix:** an open-book button in the top bar switches epub.js between `spread: "none"` and
+  `spread: "always"`. The page card widens (up to 1440 px) and gets a soft fold shadow down the middle
+  (light and dark variants). epub.js itself falls back to one page below 760 px, and the button is hidden
+  on phones. The setting is remembered.
+  *Files:* `frontend/index.html`, `frontend/reader.js`, `frontend/style.css`
+
+### 31. Keeping the reading position (when switching, and on every reload)
+Testing "does the same text stay on screen?" uncovered several position bugs. One of them (reload) had
+existed since the beginning; the earlier tests only checked the section, not the exact page.
+
+| Problem | Cause | Fix |
+| --- | --- | --- |
+| Switching one/two pages jumped to the start of the section | Re-layouting in place makes epub.js go to the section start and save that position | Rebuild the view and open it at the saved text |
+| Reload opened one or two pages too early | epub.js computes the page before the book's web font (Literata) has loaded; the font changes line breaks, so the text moves to later pages | Wait until the font stylesheet has loaded and Literata is usable (`document.fonts.load`), then jump again. `fonts.ready` alone isn't enough: it resolves before the font download has even started |
+| Still one page too early sometimes | A saved position is the first character of a page, exactly on a page boundary, and epub.js sometimes rounds it down to the page before | After jumping, check whether the position is really on screen; if not, turn forward (max. 3 pages) |
+| That check said "visible" when it wasn't | A saved position is an empty range, which has no on-screen box | Measure the first character instead |
+| Wrong position used when switching | `rendition.currentLocation()` can return a stale page | Use the position from the last `relocated` event |
+| One → two → one pages ended one page earlier | A spread starts at its left page, which is the page before the one you were reading | Remember the original text while switching; forget it as soon as you turn a page yourself (it can't be tied to the `relocated` event, which epub.js reports with a delay) |
+
+- **Tested in the browser** (twice in a row): reload opens exactly the same page; the text read in
+  one-page mode is visible after switching to two pages; switching back returns to exactly the same
+  page. Page turning moves two pages, words on the right page can be clicked (popover opens), dark mode
+  works, and the earlier UI tests still pass.
+
+---
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
