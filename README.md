@@ -48,6 +48,10 @@ Open http://localhost:8000.
 - **Navigation:** use the ‹ › buttons, the ← → keys, or the Contents menu.
 - **Look up a word:** click it. Close the popover with Esc or by clicking outside it.
   The first lookup can take a while because the model has to load.
+- **Meaning in:** the selector in the toolbar sets the language of meanings and translations: Tiếng Việt
+  (default), English or Deutsch. If it matches the book's language (e.g. a German book with meanings in
+  Deutsch), you get a simpler synonym and an explanation in simple language instead of a translation.
+  The setting is remembered. Saved words show their meaning language in the Notes column.
 - **Translate a selection:** select text with the mouse (or Shift + arrow keys), then press the
   **Dịch · Translate** button that appears.
   - **Up to 4 words** (*gave up*, *zu Hause*, *ein wenig*) are looked up like a word: dictionary entry,

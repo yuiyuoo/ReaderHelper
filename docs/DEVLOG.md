@@ -254,6 +254,38 @@ had to load).
 
 ---
 
+## Part 6: Choosing the meaning language (vi / en / de)
+
+### 24. Meanings only in Vietnamese
+- **Request:** choose whether meanings and translations are in Vietnamese, English or German.
+- **Fix:**
+  - Toolbar selector **Meaning in** (Tiếng Việt / English / Deutsch), remembered in localStorage. It is
+    sent as `target` to `/lookup` and `/translate`; the server only accepts `vi`, `en` or `de` (422 otherwise).
+  - **Prompt:** the model now sees neutral keys (`translation`, `gloss`, `sense`, `explanation`) instead of
+    `translation_vi`. Asking for English text under a key named `…_vi` would confuse a small model.
+    The API responses keep the original field names from the spec (`translation_vi`, …) plus a new
+    `target_lang` field, so the frontend and vocabulary didn't need renaming.
+  - **One example per target language** (bờ sông / riverbank / Ufer). Small models copy the language of
+    the example, so a Vietnamese example would make them answer in Vietnamese.
+  - **Same language as the book** (e.g. German book, meaning in German): the prompt asks for a simpler
+    synonym and a simple explanation (learner's-dictionary style); passages are rewritten in simpler language.
+  - **Cache:** the target language is part of the cache variant, so switching languages never shows
+    answers in the old language.
+  - **Vocabulary:** new column `target_lang`, added automatically to existing databases (existing words
+    became `vi`). Saving the same word with another meaning language creates a separate entry.
+    The Notes column shows the language as a small tag.
+  - Popover labels follow the language of the answer (e.g. "Meaning in this sentence",
+    "Bedeutung in diesem Satz").
+- **Results (qwen3:4b):** all answers came back in the chosen language; no Vietnamese leaked into en/de.
+  The quality is the same as before: *bank* (river) was right in all three languages, *lag* was wrong in all
+  three, and the German passage translated *bank* as "Bank" instead of "Ufer". German → German explanations
+  were weak (once the model just copied the sentence).
+
+  *Files:* `backend/llm.py`, `backend/main.py`, `backend/db.py`, `frontend/index.html`,
+  `frontend/reader.js`, `frontend/vocab.html`
+
+---
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
@@ -265,6 +297,7 @@ had to load).
 | Dictionary and model in any order | Dictionary first, then model | The model needs the senses (#14) |
 | `/lookup` takes `{word, sentence}` | + optional `lang_hint`, `refresh` | Short-sentence language detection; ↻ Ask again |
 | Only single words are looked up | + phrases (≤ 4 words) through `/lookup`; + passages through new `POST /translate` (≤ 600 chars) | Feature request (#20) |
+| Meanings always in Vietnamese | Selectable: Vietnamese (default), English, German; `*_vi` fields hold the chosen language, `target_lang` says which | Feature request (#24) |
 
 ---
 
