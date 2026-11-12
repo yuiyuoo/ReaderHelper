@@ -576,6 +576,32 @@ answer several times faster; the app needs no change for that.
   verified on a real iPhone** – that needs the user's test.
   *File:* `frontend/reader.js`
 
+---
+
+## Part 13: AI on/off
+
+### 42. Sometimes the dictionary is enough
+- **Request:** a switch to turn the AI off; with the dictionary alone a word should still be saveable.
+- **Fix** (`frontend/reader.js`, `frontend/index.html`, `frontend/style.css`, `backend/main.py`):
+  - ✨ **AI** button in the reader's top bar (remembered). Off: a lookup stops after the fast first step
+    (base form, dictionary, audio) and the popup says "AI is off – dictionary only".
+  - **Save word** works without an AI answer: the chosen English dictionary meaning is stored as the note
+    (`target_lang` = en); a Vietnamese meaning can be added later with Edit. The same applies when the AI
+    step failed.
+  - **✨ Ask AI** in the popup gets the AI answer for just this word (or passage) without turning the AI on.
+  - Selected passages need the AI; with the AI off the popup says so and offers Ask AI.
+  - Answers already in the cache are shown complete even with the AI off.
+  - With the AI off, opening a book only preloads spaCy (`/api/warmup?ai=false`), not the language model
+    (about 6 GB of memory saved).
+- **Found while testing:**
+  - With the AI off, the first lookup took 4.5 s because nothing was preloaded, not even spaCy. Now spaCy is
+    always preloaded → 0.4 s.
+  - Wiktionary answered `429 Too Many Requests` after the quick series of test lookups, so the dictionary
+    looked "unreachable". Dictionary requests now wait 1.5 s and retry once on 429.
+- **Tested on a copy of the data:** AI off → no preloading of the model, popup after 0.4 s with only the
+  dictionary request; saving without AI; Ask AI (answer after ~14–19 s); passage with AI off (message, no
+  request); switching AI on preloads the model and is remembered.
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |

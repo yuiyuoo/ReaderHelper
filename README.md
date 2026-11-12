@@ -100,6 +100,12 @@ vocabulary list shows one card per word. The PC does all the work, so lookups ar
   The base form, pronunciation and dictionary meanings appear first (1–2 s); the meaning in this sentence
   and a translation of the whole sentence follow when the model is done. The model is loaded in the
   background as soon as you open a book, so the first lookup doesn't also wait for that.
+- **AI on/off** (✨ AI button in the reader's top bar, remembered): when off, a lookup shows only the base
+  form, pronunciation and dictionary meanings – almost instantly – and you can still **Save word** (the
+  English dictionary meaning becomes the note; add a Vietnamese one later with Edit). **✨ Ask AI** in the
+  popup gets the AI meaning for just that word. Translating a selected passage always needs the AI. With the
+  AI off, the model isn't loaded at all (saves about 6 GB of memory); AI answers you already got are still
+  shown from the cache.
 - **Meaning in:** the selector in the toolbar sets the language of meanings and translations: Tiếng Việt
   (default), English or Deutsch. If it matches the book's language (e.g. a German book with meanings in
   Deutsch), you get a simpler synonym and an explanation in simple language instead of a translation.
