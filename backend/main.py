@@ -360,6 +360,31 @@ def get_vocab(book_id: int | None = None):
     return db.list_vocab(book_id)
 
 
+# ---------- highlighting saved words in the book ----------
+
+class HighlightIn(BaseModel):
+    lang: Literal["en", "de"]
+    paragraphs: list[str] = Field(max_length=5000)
+
+
+@app.post("/api/highlights")
+async def highlights(q: HighlightIn):
+    """Where in these paragraphs do saved words occur? Matched by base form with the same analysis as a
+    clicked word, so a saved "fangen" marks "fing"/"fängt" but not "fing … an" (anfangen).
+    Returns, per paragraph, [start, end] character spans. Phrases (several words) are matched in the
+    browser by their spelling."""
+    if sum(map(len, q.paragraphs)) > 1_000_000:
+        raise HTTPException(400, "Too much text at once.")
+    lemmas = {v["lemma"] for v in db.list_vocab() if v["lang"] == q.lang and " " not in v["lemma"].strip()}
+    if not lemmas:
+        return {"spans": [[] for _ in q.paragraphs]}
+    try:
+        spans = await asyncio.to_thread(nlp.find_lemmas, q.lang, q.paragraphs, lemmas)
+    except OSError:
+        raise HTTPException(500, f"spaCy model for '{q.lang}' is missing.")
+    return {"spans": spans}
+
+
 # ---------- review (spaced repetition) ----------
 
 @app.get("/api/review")

@@ -602,6 +602,36 @@ answer several times faster; the app needs no change for that.
   dictionary request; saving without AI; Ask AI (answer after ~14–19 s); passage with AI off (message, no
   request); switching AI on preloads the model and is remembered.
 
+### 43. Saved "fangen" also highlighted "fing … an" (anfangen)
+- **Problem:** after saving *fing* (fangen), every *fing* in the book was highlighted, including
+  *Da fing sie an zu weinen*, where it belongs to **anfangen**.
+- **Cause 1:** highlighting compared only the **spelling** of saved words, not their base form.
+- **Cause 2:** the small German spaCy model often misses separable verbs when words come between verb and
+  particle (*fing das Mädchen an*: dependency `op` instead of `svp`). So even clicking *fing* there gave
+  *fangen*, and the word was saved with the wrong base form and therefore a wrong meaning.
+- **Fix:**
+  - Highlighting by **base form**: `POST /api/highlights` gets the chapter's paragraphs and returns where
+    words occur whose base form was saved, using `token_lemma()`, the same function a clicked word goes
+    through. A saved *fangen* now marks *fing, fängt* but not *fing … an*; a saved *anfangen* marks both
+    parts. Paragraph analyses are cached in memory (first analysis of a 70,000-character chapter ≈ 2 s,
+    afterwards ≈ 1 ms, so re-highlighting after saving a word is instant). Phrases are still matched by
+    spelling in the browser; so is everything if the server can't be reached.
+  - **Separable verbs:** spaCy's tagger still tags the particle `PTKVZ` even when the parser misses the
+    link. Such a particle now belongs to the nearest finite verb before it in the sentence, if particle +
+    verb is a known German word (`simplemma.is_known`: *anfangen* ✓, *aufkatze* ✗). *Das Buch lag auf dem
+    Tisch* stays *liegen* (there `auf` is a preposition, not `PTKVZ`).
+  - A trap on the way: spaCy creates a new Token object on every access, so comparing tokens with `is`
+    never matched; tokens are now compared by position.
+  - **Base forms:** spaCy sometimes invents a non-word (*fortwarfst* → "fortwarfsen"). If spaCy's result
+    isn't a known German word but simplemma's is, simplemma's is used (*fortwerfen*).
+  - The user's saved words were re-lemmatised once from their sentences (backup taken): `fing` → *fangen*,
+    the second `fing` (from *fing sie an*) → *anfangen*, `fortwarfst` → *fortwerfen*. Their saved meanings
+    were generated with the wrong base form and are left for the user to redo (Ask again → Save word).
+- **Tested:** unit checks for fangen/anfangen/ansehen/aufstehen/liegen and English; in the browser, the
+  chapter "Jakobs Haus": all four *fing* = fangen highlighted, *fing sie an* not, one request per chapter.
+  *Files:* `backend/nlp.py` (`token_lemma`, `find_lemmas`, separable-verb helpers, `_base_form`),
+  `backend/main.py` (`/api/highlights`), `frontend/reader.js` (`highlightSaved`)
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |

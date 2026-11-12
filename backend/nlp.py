@@ -64,9 +64,13 @@ def _base_form(lang: str, tok) -> str:
     spaCy model doesn't know many irregular forms ("fing", "molk", "aß"), which simplemma's word lists do.
     Not used for English: spaCy is good there, and simplemma turns adjectives like "tired" into "tire"."""
     lemma = tok.lemma_.strip() or tok.text
-    if lang == "de" and lemma.lower() == tok.text.lower() and tok.pos_ not in ("PROPN", "PUNCT", "NUM"):
-        alt = simplemma.lemmatize(tok.text, lang=lang)
-        if alt and alt.lower() != tok.text.lower():
+    if lang != "de" or tok.pos_ in ("PROPN", "PUNCT", "NUM"):
+        return lemma
+    # Ask simplemma when spaCy left the word unchanged, or produced something that isn't a German word
+    # (spaCy guessed "fortwarfsen" for "fortwarfst"; simplemma knows "fortwerfen").
+    if lemma.lower() == tok.text.lower() or not simplemma.is_known(lemma, lang="de"):
+        alt = simplemma.lemmatize(tok.text, lang="de")
+        if alt and alt.lower() != tok.text.lower() and simplemma.is_known(alt, lang="de"):
             return alt
     return lemma
 
@@ -87,19 +91,79 @@ def lemmatize(lang: str, word: str, sentence: str) -> tuple[str, str]:
         tok = doc[0] if len(doc) else None
     if tok is None:
         return word, ""
+    return token_lemma(lang, tok)
+
+
+# German separable verbs ("fing ... an" = anfangen). spaCy's parser often misses the link when words come
+# between verb and particle ("Dann fing das Mädchen an zu weinen" -> dep "op", not "svp"), but its tagger
+# still tags the particle PTKVZ ("abgetrennter Verbzusatz"). So: a PTKVZ particle belongs to the nearest
+# finite verb before it in the sentence, if verb + particle is a known German word.
+_FINITE = {"VVFIN", "VAFIN", "VMFIN"}
+
+
+def _verb_of_particle(tok):
+    """The verb a separated particle belongs to, or None."""
+    if tok.dep_ == "svp" and tok.head.pos_ in ("VERB", "AUX"):
+        return tok.head  # the parser linked them itself
+    if tok.tag_ != "PTKVZ":
+        return None
+    sent = tok.sent
+    verb = next((t for t in reversed(sent[: tok.i - sent.start]) if t.tag_ in _FINITE), None)
+    if verb is not None and simplemma.is_known(tok.text.lower() + _base_form("de", verb), lang="de"):
+        return verb
+    return None
+
+
+def _particle_of_verb(verb):
+    """The separated particle of a verb ("an" for "fing" in "fing … an"), or None."""
+    particle = next((c for c in verb.children if c.dep_ == "svp"), None)
+    if particle is not None:
+        return particle
+    sent = verb.sent
+    for t in sent[verb.i - sent.start + 1:]:
+        if t.tag_ == "PTKVZ":
+            v = _verb_of_particle(t)
+            # Compare positions: spaCy creates a new Token object on every access, so `is` never matches.
+            if v is not None and v.i == verb.i:
+                return t
+    return None
+
+
+def token_lemma(lang: str, tok) -> tuple[str, str]:
+    """(lemma, coarse POS) of one spaCy token in its sentence. Used for clicked words and for highlighting
+    saved words, so both always agree. German separable verbs are joined: "fing ... an" -> "anfangen"."""
     lemma, pos = _base_form(lang, tok), tok.pos_
     if lang == "de":
-        # spaCy marks a separated verb particle with dep "svp", attached to its verb.
-        if tok.dep_ == "svp" and tok.head.pos_ in ("VERB", "AUX"):
-            lemma, pos = tok.text.lower() + _base_form(lang, tok.head), "VERB"
-        elif tok.pos_ in ("VERB", "AUX"):
-            particle = next((c for c in tok.children if c.dep_ == "svp"), None)
-            if particle is not None:
-                lemma = particle.text.lower() + lemma
+        if (verb := _verb_of_particle(tok)) is not None:
+            lemma, pos = tok.text.lower() + _base_form(lang, verb), "VERB"
+        elif tok.pos_ in ("VERB", "AUX") and (particle := _particle_of_verb(tok)) is not None:
+            lemma = particle.text.lower() + lemma
     # German nouns are capitalised; English lemmas lowercase (except proper nouns like "I"/names).
-    if lang == "en" and not (lemma[:1].isupper() and word[:1].isupper()):
+    if lang == "en" and not (lemma[:1].isupper() and tok.text[:1].isupper()):
         lemma = lemma.lower()
     return lemma, pos
+
+
+# Per-paragraph analysis cache: (lang, text) -> [(start, end, lemma lowercased), ...]. Parsing a chapter
+# takes a few seconds; with this cache, re-highlighting after saving a word is instant.
+_PARA_CACHE: dict[tuple[str, str], list[tuple[int, int, str]]] = {}
+_PARA_CACHE_MAX = 20000
+
+
+def find_lemmas(lang: str, paragraphs: list[str], lemmas: set[str]) -> list[list[list[int]]]:
+    """For each paragraph, [start, end] character spans of the words whose lemma is in `lemmas`
+    (compared case-insensitively). For a separable verb both parts count ("fing" and "an" of anfangen)."""
+    wanted = {l.lower() for l in lemmas}
+    todo = [p for p in dict.fromkeys(paragraphs) if (lang, p) not in _PARA_CACHE]
+    if todo:
+        for text, doc in zip(todo, get_nlp(lang).pipe(todo, batch_size=64)):
+            if len(_PARA_CACHE) >= _PARA_CACHE_MAX:
+                _PARA_CACHE.clear()  # simple bound; it refills from what is being read
+            _PARA_CACHE[(lang, text)] = [
+                (t.idx, t.idx + len(t.text), token_lemma(lang, t)[0].lower())
+                for t in doc if t.is_alpha
+            ]
+    return [[[s, e] for s, e, lem in _PARA_CACHE[(lang, p)] if lem in wanted] for p in paragraphs]
 
 
 def _strip_html(s: str) -> str:

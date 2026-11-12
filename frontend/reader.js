@@ -29,7 +29,8 @@
   let book = null, rendition = null, bookName = "", bookLang = "";
   let inflight = null;          // AbortController of the current /lookup
   let lookupSeq = 0;            // guards against late responses
-  let savedWords = new Set();   // lowercase forms for highlighting
+  let savedWords = new Set();   // lowercase spellings of saved words (fallback highlighting)
+  let savedPhrases = new Set(); // saved entries of several words, highlighted by spelling
   let currentTarget = LABELS[store.get("target")] ? store.get("target") : "vi";
   let autoplay = store.get("autoplay") === "1";
   let fontPct = Math.min(FONT_MAX, Math.max(FONT_MIN, Number(store.get("fontSize")) || 100));
@@ -923,9 +924,8 @@
       });
       if (!r.ok) throw new Error();
       btn.textContent = "Saved ✓";
-      savedWords.add(d.word.toLowerCase());
+      await loadSavedWords();  // refresh the saved list (for highlighting) and the vocabulary count
       rendition?.getContents().forEach(highlightSaved);
-      loadSavedWords();  // refresh the vocabulary count
     } catch {
       btn.disabled = false;
       btn.textContent = "Save failed – retry";
@@ -936,21 +936,84 @@
     try {
       const items = await (await fetch("/api/vocab")).json();
       savedWords = new Set(items.map((v) => v.word.toLowerCase()));
+      savedPhrases = new Set(items.filter((v) => v.word.trim().includes(" ")).map((v) => v.word.toLowerCase()));
       els.vocabCount.textContent = items.length;
       els.vocabCount.hidden = items.length === 0;
     } catch { /* highlighting and the count are optional */ }
   }
 
-  /** Highlight saved words with the CSS Custom Highlight API (no DOM changes, so CFIs stay valid). */
-  function highlightSaved(contents) {
-    const win = contents.window;
-    if (!markSaved) { win.CSS?.highlights?.delete("saved-word"); return; }
-    if (!win.CSS?.highlights || !win.Highlight || savedWords.size === 0) return;
+  /** Highlight saved words with the CSS Custom Highlight API (no DOM changes, so CFIs stay valid).
+   *  Single words are matched by their base form on the server, with the same analysis as a click: a
+   *  saved "fangen" marks "fing"/"fängt" but not "fing … an" (that is anfangen). Phrases (several words),
+   *  books in other languages, or a failed request fall back to matching the spelling. */
+  async function highlightSaved(contents) {
+    const win = contents.window, doc = contents.document;
+    if (!win?.CSS?.highlights || !win.Highlight) return;
+    if (!markSaved || savedWords.size === 0) { win.CSS.highlights.delete("saved-word"); return; }
+    let ranges = spellingMatches(doc, savedPhrases);
+    if (["en", "de"].includes(bookLang)) {
+      try {
+        ranges = ranges.concat(await baseFormMatches(doc));
+      } catch {
+        ranges = spellingMatches(doc, savedWords);  // server unreachable: spelling only
+      }
+    } else {
+      ranges = spellingMatches(doc, savedWords);
+    }
+    if (!doc.defaultView) return;  // the chapter was replaced meanwhile
+    win.CSS.highlights.set("saved-word", new win.Highlight(...ranges));
+  }
+
+  /** Text of the book page, grouped by paragraph (block element), with where each text node starts. */
+  function paragraphsOf(doc) {
+    const byBlock = new Map();
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const el = n.parentElement?.closest(BLOCKS) || doc.body;
+      let b = byBlock.get(el);
+      if (!b) { b = { text: "", nodes: [] }; byBlock.set(el, b); }
+      b.nodes.push({ node: n, start: b.text.length });
+      b.text += n.data;
+    }
+    return [...byBlock.values()].filter((b) => /\p{L}/u.test(b.text));
+  }
+
+  /** Text node + offset for a character position inside a paragraph. */
+  function pointIn(b, offset) {
+    let i = b.nodes.length - 1;
+    while (i > 0 && b.nodes[i].start > offset) i--;
+    return [b.nodes[i].node, offset - b.nodes[i].start];
+  }
+
+  async function baseFormMatches(doc) {
+    const paras = paragraphsOf(doc);
+    if (!paras.length) return [];
+    const r = await fetch("/api/highlights", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ lang: bookLang, paragraphs: paras.map((b) => b.text) }),
+    });
+    if (!r.ok) throw new Error(`highlights ${r.status}`);
+    const { spans } = await r.json();
+    const ranges = [];
+    spans.forEach((list, i) => {
+      for (const [s, e] of list) {
+        const range = doc.createRange();
+        range.setStart(...pointIn(paras[i], s));
+        range.setEnd(...pointIn(paras[i], e));
+        ranges.push(range);
+      }
+    });
+    return ranges;
+  }
+
+  /** Whole-word matches of the given spellings (used for phrases and as a fallback). */
+  function spellingMatches(doc, words) {
+    if (!words.size) return [];
     const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // Whole words only. Group 1 is the character before the word (or nothing at the start); written
-    // without a lookbehind "(?<!…)", which iPhones before iOS 16.4 don't support.
-    const re = new RegExp(`(^|[^\\p{L}\\p{M}])(${[...savedWords].map(escRe).join("|")})(?![\\p{L}\\p{M}])`, "giu");
-    const doc = contents.document;
+    // Group 1 is the character before the word (or nothing at the start); written without a
+    // lookbehind "(?<!…)", which iPhones before iOS 16.4 don't support.
+    const re = new RegExp(`(^|[^\\p{L}\\p{M}])(${[...words].map(escRe).join("|")})(?![\\p{L}\\p{M}])`, "giu");
     const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
     const ranges = [];
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -964,7 +1027,7 @@
         if (m[2].length === 0) re.lastIndex++;  // safety: never loop on an empty match
       }
     }
-    win.CSS.highlights.set("saved-word", new win.Highlight(...ranges));
+    return ranges;
   }
 
   // ---------- init ----------
