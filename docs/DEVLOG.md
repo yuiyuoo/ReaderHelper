@@ -632,6 +632,25 @@ answer several times faster; the app needs no change for that.
   *Files:* `backend/nlp.py` (`token_lemma`, `find_lemmas`, separable-verb helpers, `_base_form`),
   `backend/main.py` (`/api/highlights`), `frontend/reader.js` (`highlightSaved`)
 
+### 44. Does the separable-verb fix work for all verbs, or only for "fangen"?
+- **Question:** is #43 a fix for the one example or general?
+- **General:** no word lists. It relies on spaCy's tagger (`PTKVZ` = separated particle) and on simplemma's
+  dictionary to confirm that particle + verb is a real word.
+- **Measured** with 37 sentences (`tools/check_lemmas.py`, new): many different separable verbs
+  (*ankommen, einkaufen, mitnehmen, zurückkommen, aussehen, festhalten, teilnehmen, stattfinden,
+  fernsehen …*), unseparated forms (*aufsteht, angekommen*) and traps where the particle is really a
+  preposition (*lag auf dem Tisch, sah aus dem Fenster, ging mit ihrem Bruder*). First run: 20/22.
+- **Two gaps found and fixed:**
+  - **Verb first** (imperative, yes/no question): spaCy tags a capitalised verb at the start of a sentence
+    as a name/noun (*Mach die Tür zu!*, *Stehst du früh auf?*). The first word of a sentence is now also tried
+    as the verb (simplemma on the lowercased word, or stem + "en" for imperatives like *Ruf/Komm*).
+  - A verb form must also **look** like an infinitive (lowercase, ends in -n): simplemma read *Ruf* as the
+    noun "der Ruf", and "Anruf" is a real word, so *Ruf … an* became "anRuf" instead of *anrufen*.
+- **Result: 36/37.** Still wrong: irregular 2nd person with vowel change at the start of a question
+  (*Nimmst du den Schirm mit?*): neither spaCy nor simplemma know *nimmst*. The same verb elsewhere
+  (*Sie nahm ihn mit*) works. Base forms and English were re-checked: unchanged.
+  *Files:* `backend/nlp.py`, `tools/check_lemmas.py` (new)
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |

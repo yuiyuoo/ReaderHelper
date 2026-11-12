@@ -101,27 +101,60 @@ def lemmatize(lang: str, word: str, sentence: str) -> tuple[str, str]:
 _FINITE = {"VVFIN", "VAFIN", "VMFIN"}
 
 
+def _verb_bases(tok) -> list[str]:
+    """Possible infinitives of `tok` if it is (or, at the start of a sentence, may be) a verb.
+    spaCy's small model tags a capitalised verb at the start of a sentence as a name or noun
+    ("Mach die Tür zu!", "Stehst du früh auf?"), so there we try simplemma on the lowercased word and,
+    for imperatives like "Ruf"/"Komm", the stem + "en". Only lowercase forms ending in -n count as verbs
+    (simplemma reads "Ruf" as the noun "der Ruf")."""
+    is_verb = tok.pos_ in ("VERB", "AUX")
+    first_word = tok.i == tok.sent.start and tok.text[:1].isupper()
+    if not (is_verb or first_word):
+        return []
+    low = tok.text.lower()
+    tries = [_base_form("de", tok)] if is_verb else []
+    if first_word:
+        tries += [simplemma.lemmatize(low, lang="de"), low + "en", low + "n"]
+    # Even a token tagged VERB can get a noun as lemma ("Ruf" -> "Ruf"), so the shape check applies to all.
+    return [t for t in dict.fromkeys(tries)
+            if t and t.islower() and t.endswith("n") and (t != low or is_verb)]
+
+
+def _verb_base(tok) -> str | None:
+    bases = _verb_bases(tok)
+    return bases[0] if bases else None
+
+
+def _compound(particle, verb) -> str | None:
+    """particle + verb's infinitive, if that is a known German word ("an" + "fangen" = "anfangen")."""
+    for base in _verb_bases(verb):
+        word = particle.text.lower() + base
+        if simplemma.is_known(word, lang="de"):
+            return word
+    return None
+
+
 def _verb_of_particle(tok):
     """The verb a separated particle belongs to, or None."""
-    if tok.dep_ == "svp" and tok.head.pos_ in ("VERB", "AUX"):
-        return tok.head  # the parser linked them itself
-    if tok.tag_ != "PTKVZ":
+    if tok.dep_ != "svp" and tok.tag_ != "PTKVZ":
         return None
     sent = tok.sent
-    verb = next((t for t in reversed(sent[: tok.i - sent.start]) if t.tag_ in _FINITE), None)
-    if verb is not None and simplemma.is_known(tok.text.lower() + _base_form("de", verb), lang="de"):
-        return verb
+    candidates = []
+    if tok.dep_ == "svp":
+        candidates.append(tok.head)  # the parser linked them itself
+    candidates.append(next((t for t in reversed(sent[: tok.i - sent.start]) if t.tag_ in _FINITE), None))
+    candidates.append(sent[0])       # imperative / question: the verb comes first
+    for verb in candidates:
+        if verb is not None and verb.i < tok.i and _compound(tok, verb):
+            return verb
     return None
 
 
 def _particle_of_verb(verb):
     """The separated particle of a verb ("an" for "fing" in "fing … an"), or None."""
-    particle = next((c for c in verb.children if c.dep_ == "svp"), None)
-    if particle is not None:
-        return particle
     sent = verb.sent
     for t in sent[verb.i - sent.start + 1:]:
-        if t.tag_ == "PTKVZ":
+        if t.dep_ == "svp" or t.tag_ == "PTKVZ":
             v = _verb_of_particle(t)
             # Compare positions: spaCy creates a new Token object on every access, so `is` never matches.
             if v is not None and v.i == verb.i:
@@ -135,9 +168,9 @@ def token_lemma(lang: str, tok) -> tuple[str, str]:
     lemma, pos = _base_form(lang, tok), tok.pos_
     if lang == "de":
         if (verb := _verb_of_particle(tok)) is not None:
-            lemma, pos = tok.text.lower() + _base_form(lang, verb), "VERB"
-        elif tok.pos_ in ("VERB", "AUX") and (particle := _particle_of_verb(tok)) is not None:
-            lemma = particle.text.lower() + lemma
+            lemma, pos = _compound(tok, verb), "VERB"
+        elif _verb_base(tok) is not None and (particle := _particle_of_verb(tok)) is not None:
+            lemma, pos = _compound(particle, tok), "VERB"
     # German nouns are capitalised; English lemmas lowercase (except proper nouns like "I"/names).
     if lang == "en" and not (lemma[:1].isupper() and tok.text[:1].isupper()):
         lemma = lemma.lower()
