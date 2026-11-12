@@ -341,6 +341,8 @@
     html.rh-dark { --rh-text:#e7e3d9; --rh-link:#82c29e; --rh-hl:#2f4a39; --rh-ul:#82c29e; --rh-sel:#35503f; }
     /* The iframe's colour scheme must match the page, or the browser paints an opaque white backdrop. */
     html { background: transparent !important; color-scheme: light; }
+    /* Swipes turn pages; without this the browser treats a right swipe as "go back". */
+    html, body { overscroll-behavior-x: none; }
     html.rh-dark { color-scheme: dark; }
     body { font-family: "Literata", Georgia, serif !important; color: var(--rh-text) !important;
            background: transparent !important; line-height: 1.7 !important; cursor: default;
@@ -395,7 +397,38 @@
     // Wait a tick so the selection is final when the mouse/finger is released.
     doc.addEventListener("mouseup", () => setTimeout(() => onSelectionEnd(doc), 0));
     doc.addEventListener("touchend", () => setTimeout(() => onSelectionEnd(doc), 0));
+    addSwipe(doc);
     highlightSaved(contents);
+  }
+
+  /** Swipe left/right on a touch screen to turn pages. Only a quick, clearly horizontal movement counts,
+   *  so tapping a word and long-pressing to select text still work. */
+  function addSwipe(doc) {
+    let start = null;
+    doc.addEventListener("touchstart", (e) => {
+      start = e.touches.length === 1
+        ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() } : null;
+    }, { passive: true });
+    // A clearly horizontal drag is ours: stop the browser from treating it as "go back/forward".
+    doc.addEventListener("touchmove", (e) => {
+      if (!start || e.touches.length !== 1) return;
+      const sel = doc.getSelection();
+      if (sel && !sel.isCollapsed) return;  // adjusting a text selection
+      const dx = e.touches[0].clientX - start.x, dy = e.touches[0].clientY - start.y;
+      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) && e.cancelable) e.preventDefault();
+    }, { passive: false });
+    doc.addEventListener("touchend", (e) => {
+      if (!start) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - start.x, dy = t.clientY - start.y, dt = Date.now() - start.t;
+      start = null;
+      const sel = doc.getSelection();
+      if (sel && !sel.isCollapsed) return;  // the user was selecting text
+      if (Math.abs(dx) < 50 || Math.abs(dx) < 1.5 * Math.abs(dy) || dt > 800) return;
+      closePopover();
+      hideSelBtn();
+      if (dx < 0) goNext(); else goPrev();
+    }, { passive: true });
   }
 
   // ---------- click → word + sentence ----------
@@ -533,6 +566,8 @@
 
     const b = els.selBtn;
     b.hidden = false;
+    // Phones: fixed at the bottom (CSS), clear of the system's own copy/paste menu above the selection.
+    if (PHONE.matches) { b.style.left = b.style.top = ""; return; }
     b.style.left = `${Math.min(last.right - b.offsetWidth / 2, window.innerWidth - b.offsetWidth - 8)}px`;
     b.style.top = `${Math.min(last.bottom + 6, window.innerHeight - b.offsetHeight - 8)}px`;
   }
@@ -756,8 +791,12 @@
     };
   }
 
+  // On phones the popover is a bottom sheet and the Translate button sits at the bottom (CSS).
+  const PHONE = window.matchMedia("(max-width: 600px)");
+
   function positionPopover(a) {
     const p = els.popover, m = 8;
+    if (PHONE.matches) { p.style.left = p.style.top = ""; return; }
     const w = p.offsetWidth, h = p.offsetHeight;
     let left = Math.min(Math.max(m, a.left), window.innerWidth - w - m);
     let top = a.bottom + m;
