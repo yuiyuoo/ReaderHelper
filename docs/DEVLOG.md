@@ -651,6 +651,44 @@ answer several times faster; the app needs no change for that.
   (*Sie nahm ihn mit*) works. Base forms and English were re-checked: unchanged.
   *Files:* `backend/nlp.py`, `tools/check_lemmas.py` (new)
 
+---
+
+## Part 14: Noun-verb combinations (Nomen-Verb-Verbindungen)
+
+### 45. Expressions like "in Frage stellen"
+- **Problem:** in *Er stellte die Entscheidung gestern in Frage* the meaning lies in the combination
+  (*in Frage stellen* = to doubt); the single words mislead (*stellen* = put), and the parts are far apart.
+- **Recognising** (`backend/expressions.py`, new):
+  - spaCy's parse gives candidates: a verb with its object noun (*Entscheidung treffen*) or with a
+    prepositional phrase (*in Frage stellen*). Also the passive/perfect, where the noun or phrase hangs on
+    the auxiliary (*Die Entscheidung **wurde** getroffen*, *hat … in Angriff genommen*). spaCy even has a
+    label for such phrases (`cvc`). Verb particles are included (*stellte … an*).
+  - A **key** for matching: lowercase, articles removed, verb in the infinitive. So *Er traf die
+    Entscheidung* and *eine Entscheidung treffen* share the key *entscheidung treffen*, while
+    *in Frage stellen* (doubt) and *eine Frage stellen* (ask) stay different.
+  - **Confirmed** by the list `backend/data/expressions_de.txt` (≈160 common combinations, editable), or –
+    only when a word is clicked – by a Wiktionary entry (*in Frage stellen*, *take into account*,
+    *make a decision*). Only article-less candidates are checked (*in Frage*, *Rücksicht nehmen*), because
+    ordinary use has an article (*auf **den** Tisch*, *fing **die** Maus*); so a normal click costs no extra
+    requests.
+- **Lookup:** when an expression is found it becomes the target: the model gets
+  `Target phrase: in Frage stellen (in this sentence: stellte … in Frage)` with all parts marked
+  (`Er [[stellte]] die Entscheidung gestern [[in]] [[Frage]]`) and the expression's dictionary meanings. If
+  the expression has no dictionary entry (*Hunger haben*), the tapped word's meanings are shown as a help
+  ("Definition of Hunger"), but not given to the model.
+- **Popup:** the expression as the heading, "Fixed expression · in this sentence: stellte … in Frage",
+  **Just "stellte"** (only the tapped word), **+ Add word** (tap a second word of the sentence to combine
+  them by hand; a noun brings its preposition along), **Save expression** (saved as written,
+  *stellte … in Frage*, with the base form *in Frage stellen*).
+- **Highlighting:** the paragraph analysis from #43 now also stores the expression candidates; a saved
+  expression marks all its parts, in any form and order.
+- **Tested:** 9 expression cases + the 37 base-form cases (`tools/check_lemmas.py`); in the book
+  (*Ich habe auch Hunger* → *Hunger haben*, saved, then all occurrences highlighted; Just this word;
+  + Add word); AI explanations (*in Frage stellen* → "làm nghi ngờ, thách thức", *zur Verfügung stellen* →
+  "cung cấp", *take into account* → "tính đến"); the 14-word eval unchanged at 13/14.
+  *Files:* `backend/expressions.py`, `backend/data/expressions_de.txt` (new), `backend/main.py`,
+  `backend/nlp.py`, `backend/llm.py`, `frontend/reader.js`, `frontend/style.css`, `tools/check_lemmas.py`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |

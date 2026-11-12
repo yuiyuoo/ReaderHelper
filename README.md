@@ -100,6 +100,13 @@ vocabulary list shows one card per word. The PC does all the work, so lookups ar
   The base form, pronunciation and dictionary meanings appear first (1–2 s); the meaning in this sentence
   and a translation of the whole sentence follow when the model is done. The model is loaded in the
   background as soon as you open a book, so the first lookup doesn't also wait for that.
+- **Expressions** (noun-verb combinations like *in Frage stellen*, *eine Entscheidung treffen*,
+  *take into account*): tapping any part shows the whole expression, e.g. *stellte … in Frage* →
+  **in Frage stellen**, also in the passive or perfect (*wurde in Frage gestellt*). They are recognised from
+  the list `backend/data/expressions_de.txt` (about 160 common German ones – add your own lines) and, for
+  others, from a dictionary entry. **+ Add word** in the popup combines the tapped word with another word of
+  the same sentence by hand; **Just "…"** looks up only the tapped word. A saved expression is highlighted
+  with all its parts wherever it occurs (*in Frage stellen* ≠ *eine Frage stellen*).
 - **AI on/off** (✨ AI button in the reader's top bar, remembered): when off, a lookup shows only the base
   form, pronunciation and dictionary meanings – almost instantly – and you can still **Save word** (the
   English dictionary meaning becomes the note; add a Vietnamese one later with Edit). **✨ Ask AI** in the
