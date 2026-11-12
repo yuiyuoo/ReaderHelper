@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-from . import books, db, llm, nlp  # noqa: E402  (after load_dotenv so config is read)
+from . import books, db, llm, nlp, srs  # noqa: E402  (after load_dotenv so config is read)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("readerhelper")
@@ -38,7 +38,7 @@ db.init_db()
 async def no_stale_frontend(request, call_next):
     # Make browsers revalidate HTML/JS/CSS so code updates are picked up without a hard reload.
     response = await call_next(request)
-    if request.url.path in ("/", "/read", "/vocab") or request.url.path.startswith("/static/"):
+    if request.url.path in ("/", "/read", "/vocab", "/review") or request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -58,6 +58,11 @@ def reader_page():
 @app.get("/vocab", include_in_schema=False)
 def vocab_page():
     return FileResponse(FRONTEND / "vocab.html", media_type="text/html; charset=utf-8")
+
+
+@app.get("/review", include_in_schema=False)
+def review_page():
+    return FileResponse(FRONTEND / "review.html", media_type="text/html; charset=utf-8")
 
 
 # ---------- library ----------
@@ -335,16 +340,49 @@ class VocabIn(BaseModel):
     translation_vi: str = ""
     gloss_vi: str = ""
     target_lang: Literal["vi", "en", "de"] = "vi"
+    sentence_tr: str = Field("", max_length=2000)  # translation of the whole sentence
+    book_id: int | None = None                      # where it was saved, for "Open in book"
+    cfi: str = Field("", max_length=1000)
 
 
 @app.post("/api/vocab")
 def save_vocab(item: VocabIn):
-    return db.add_vocab(item.model_dump())
+    data = item.model_dump()
+    if data["book_id"] is not None and not db.get_book(data["book_id"]):
+        data["book_id"], data["cfi"] = None, ""  # unknown book: keep the word, drop the link
+    return db.add_vocab(data)
 
 
 @app.get("/api/vocab")
-def get_vocab():
-    return db.list_vocab()
+def get_vocab(book_id: int | None = None):
+    return db.list_vocab(book_id)
+
+
+# ---------- review (spaced repetition) ----------
+
+@app.get("/api/review")
+def get_review(book_id: int | None = None, limit: int = 50):
+    """Words to review now, each with what the four answers would mean ("10 min", "3 days", …)."""
+    cards = [{**c, "preview": srs.preview(c)} for c in db.review_queue(book_id, max(1, min(limit, 200)))]
+    return {"cards": cards, "counts": db.review_counts(book_id)}
+
+
+@app.get("/api/review/counts")
+def get_review_counts(book_id: int | None = None):
+    return db.review_counts(book_id)
+
+
+class ReviewIn(BaseModel):
+    grade: Literal["again", "hard", "good", "easy"]
+
+
+@app.post("/api/vocab/{vocab_id}/review")
+def review_word(vocab_id: int, answer: ReviewIn):
+    card = db.get_vocab(vocab_id)
+    if not card:
+        raise HTTPException(404, "Not found")
+    updated = db.save_review(vocab_id, srs.schedule(card, answer.grade))
+    return {**updated, "preview": srs.preview(updated)}  # for showing it again in the same session
 
 
 class VocabUpdate(BaseModel):
