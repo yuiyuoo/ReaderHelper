@@ -703,6 +703,19 @@ answer several times faster; the app needs no change for that.
   *Files:* `frontend/reader.js`, `frontend/index.html`, `frontend/style.css`, `README.md`
   (replaces the switch from #42; saving with the dictionary meaning and the 429 retry from #42 stay)
 
+### 47. Using the app away from home
+- **Request:** reach the app outside the home Wi-Fi.
+- **Choice:** Tailscale (private network between the user's own devices). Rejected: a router port
+  forward or a public tunnel – the app has no login, so anyone could read, change or delete books and words.
+- **Setup** (user, once): Tailscale on PC and phone with the same account, then `tailscale serve --bg 8000`
+  on the PC. That serves the app at `https://<pc>.<tailnet>.ts.net` inside the tailnet only, proxies to
+  `localhost:8000` (so no firewall rule is needed) and gives the app https, which a future service worker
+  (offline start) requires.
+- **App side:** `start.bat` also prints that address ("Phone, anywhere") when Tailscale is installed, and no
+  longer lists Tailscale's own 100.x address as a Wi-Fi address. `.gitattributes` keeps `*.bat` with CRLF
+  line endings (Windows batch files can misbehave with LF only).
+  *Files:* `start.bat`, `.gitattributes`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
@@ -723,7 +736,7 @@ answer several times faster; the app needs no change for that.
 
 ## Still open (ideas)
 - Edit a word directly from the review card; show review statistics (words learned per week).
-- Access from outside the home Wi-Fi (Tailscale), then a service worker so the app starts offline and Review works without the PC.
+- Service worker (needs the Tailscale https address) so the app starts offline and Review works without the PC.
 - Book footnote numbers in chapter names ("Die drei Schläfer.(2)").
 - German adjective forms the lemmatizers miss (*ungeheueren* → should be *ungeheuer*).
 - Scroll mode, search in the book.

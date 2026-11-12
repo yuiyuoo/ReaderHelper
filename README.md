@@ -77,6 +77,24 @@ On the phone: **swipe** left/right to turn pages, tap a word for the meaning (it
 bottom), long-press to select text and press **Dịch · Translate** at the bottom of the screen. The
 vocabulary list shows one card per word. The PC does all the work, so lookups are as fast as on the PC.
 
+### Away from home (Tailscale)
+[Tailscale](https://tailscale.com) is a free private network between your own devices: the phone reaches
+the PC from anywhere, nobody else can. (Don't open a port on your router instead – the app has no login.)
+
+1. **PC:** install Tailscale (`winget install Tailscale.Tailscale` or from tailscale.com) and sign in.
+2. **iPhone/Android:** install the Tailscale app and sign in with **the same account**; allow the VPN.
+3. **PC, once,** in a terminal:
+   ```bash
+   tailscale serve --bg 8000
+   ```
+   The first time it shows a link to enable HTTPS for your Tailscale network – open it, confirm, run the
+   command again. Tailscale then serves the app at `https://<pc-name>.<your-network>.ts.net`, only inside
+   your Tailscale network, and remembers this setting (no firewall rule needed).
+4. `start.bat` now also shows this address ("Phone, anywhere"). Open it on the phone (Tailscale switched on)
+   and add it to the home screen again – it is a different address from the Wi-Fi one.
+
+The PC still has to be on, awake and running `start.bat`.
+
 - **Library (home page):** shows your books as covers, most recently opened first. Click a cover to read.
   - **Add book** (or drag an EPUB onto the page): the app reads the title, author and cover picture from
     the EPUB. A dialog lets you change the **name shown in the library**, choose your own **picture**
