@@ -6,7 +6,7 @@
   const els = {
     bookTitle: $("bookTitle"), tocBtn: $("tocBtn"), tocMenu: $("tocMenu"), tocList: $("tocList"),
     chapter: $("chapterLabel"), pct: $("progressPct"), fill: $("progressFill"),
-    fontDown: $("fontDown"), fontUp: $("fontUp"), targetGroup: $("targetGroup"), spreadBtn: $("spreadBtn"), markBtn: $("markBtn"), aiBtn: $("aiBtn"),
+    fontDown: $("fontDown"), fontUp: $("fontUp"), targetGroup: $("targetGroup"), spreadBtn: $("spreadBtn"), markBtn: $("markBtn"),
     viewer: $("viewer"), prev: $("prev"), next: $("next"), vocabCount: $("vocabCount"),
     status: $("status"), popover: $("popover"), autoplay: $("autoplay"), selBtn: $("selBtn"),
   };
@@ -40,9 +40,6 @@
   let tocItems = [];            // flattened TOC: {label, href, depth, spineIndex}
   let currentBookId = null;     // library id of the open book (saved words remember it)
   let markSaved = store.get("markSaved") !== "0";  // highlight saved words in the text
-  // AI (Ollama) on/off. Off: lookups show only base form, dictionary and audio (fast); "Ask AI" in the
-  // popup still gets the AI meaning for one word.
-  let aiOn = store.get("ai") !== "0";
   // "Open in book" from the vocabulary/review pages: /read?book=<id>&cfi=<position of the word>
   const jumpCfi = new URLSearchParams(location.search).get("cfi");
   // Last position reported by epub.js. Its currentLocation() can return a stale page
@@ -83,7 +80,9 @@
     els.viewer.innerHTML = "";  // remove the "Opening book…" placeholder, epub.js appends to the container
 
     // Load the language model now, so the first word lookup doesn't also wait for that.
-    fetch(`/api/warmup?ai=${aiOn}`, { method: "POST" }).catch(() => {});
+    // Preload only spaCy: words are looked up without the AI unless "Ask AI" is pressed, so the
+    // language model (~6 GB) is loaded on first use instead.
+    fetch("/api/warmup?ai=false", { method: "POST" }).catch(() => {});
     book = ePub(info.file_url, { openAs: "epub" });
     book.spine.hooks.serialize.register(disarmScripts);
     createRendition();
@@ -331,19 +330,6 @@
     await displayAt(cfi);
   });
 
-  function renderAi() {
-    els.aiBtn.setAttribute("aria-pressed", String(aiOn));
-    els.aiBtn.title = aiOn ? "AI meanings are on (click to use only the dictionary)"
-                           : "AI is off: dictionary only, faster (click to turn the AI on)";
-  }
-  els.aiBtn.addEventListener("click", () => {
-    aiOn = !aiOn;
-    store.set("ai", aiOn ? "1" : "0");
-    renderAi();
-    closePopover();
-    if (aiOn) fetch("/api/warmup", { method: "POST" }).catch(() => {});
-  });
-
   function renderMark() { els.markBtn.setAttribute("aria-pressed", String(markSaved)); }
   els.markBtn.addEventListener("click", () => {
     markSaved = !markSaved;
@@ -584,7 +570,7 @@
       return;
     }
     if (word === state.word || state.parts.includes(word)) return;
-    lookup(state.word, state.sentence, state.anchor, { cfi: state.cfi, parts: [...state.parts, word] });
+    lookup(state.word, state.sentence, state.anchor, { cfi: state.cfi, parts: [...state.parts, word], ask: state.ask });
   }
 
   /** EPUB position (CFI) of a range in one of the book's iframes, so a saved word can be found again. */
@@ -675,10 +661,6 @@
       renderPassage(state, "error");
       return positionPopover(anchor);
     }
-    if (!aiOn && !ask) {  // translating a passage needs the AI
-      renderPassage(state, "off");
-      return positionPopover(anchor);
-    }
     renderPassage(state, "loading");
     positionPopover(anchor);
     try {
@@ -718,9 +700,6 @@
       html += `<div class="section loading"><span class="spinner"></span>Translating… this can take 10–20 seconds.</div>`;
     } else if (phase === "error") {
       html += `<div class="section error">${esc(state.error)}</div>`;
-    } else if (phase === "off") {
-      html += `<div class="section note">AI is off. Translating a passage needs the AI.</div>
-        <div class="actions"><button data-act="ask" class="save">✨ Ask AI</button></div>`;
     } else {
       if (d.translation_vi) {
         html += `<div class="section"><div class="label">${esc(L.tr)}</div><div class="passage-vi">${esc(d.translation_vi)}</div></div>`;
@@ -758,7 +737,7 @@
     const seq = ++lookupSeq;
     addingTo = null;
     const hintLang = ["en", "de"].includes(bookLang) ? bookLang : null;
-    const state = { word, sentence, anchor, cfi, parts, single, lang: hintLang, data: null };
+    const state = { word, sentence, anchor, cfi, parts, single, ask, lang: hintLang, data: null };
 
     renderPopover(state, "loading");
     positionPopover(anchor);
@@ -784,8 +763,9 @@
       state.data = data;
       state.lang = data.lang;
       if (autoplay && !hintLang) speak(word, data.lang);
-      if (data.pending && !aiOn && !ask) {
-        // AI is off: the dictionary result is the answer (cached AI answers still come back complete).
+      if (data.pending && !ask) {
+        // Words: the dictionary result is the answer; "Ask AI" gets the meaning in this sentence.
+        // (An AI answer from earlier comes back complete from the cache.)
         renderPopover(state, "dict");
         positionPopover(anchor);
         return;
@@ -867,8 +847,7 @@
       html += `<div class="section sentence">${esc(d.sentence || state.sentence)}` +
         (d.sentence_tr ? `<div class="sentence-tr">${esc(d.sentence_tr)}</div>` : "") + `</div>`;
       if (phase === "dict") {
-        html += `<div class="section note">AI is off – dictionary only.</div>
-          <div class="actions"><button class="save" data-act="save">Save ${ex ? "expression" : "word"}</button>
+        html += `<div class="actions"><button class="save" data-act="save">Save ${ex ? "expression" : "word"}</button>
           <button data-act="ask" title="Get the meaning in this sentence from the AI (takes a while)">✨ Ask AI</button>
           <button data-act="add" title="Add another word of this sentence (for expressions like “in Frage stellen”)">+ Add word</button></div>`;
       }
@@ -888,10 +867,10 @@
       if (act === "close") closePopover();
       if (act === "speak") speak(state.word, state.lang || "en");
       if (act === "save") saveWord(state, ev.target);
-      const again = { cfi: state.cfi, parts: state.parts, single: state.single };
+      const again = { cfi: state.cfi, parts: state.parts, single: state.single, ask: state.ask };
       if (act === "retry") lookup(state.word, state.sentence, state.anchor, { ...again, refresh: true, ask: true });
       if (act === "ask") lookup(state.word, state.sentence, state.anchor, { ...again, ask: true });
-      if (act === "single") lookup(state.word, state.sentence, state.anchor, { cfi: state.cfi, single: true });
+      if (act === "single") lookup(state.word, state.sentence, state.anchor, { cfi: state.cfi, single: true, ask: state.ask });
       if (act === "add") { addingTo = state; renderPopover(state, phase); }
       if (act === "cancel-add") { addingTo = null; renderPopover(state, phase); }
     };
@@ -1072,7 +1051,6 @@
   renderTarget();
   renderSpread();
   renderMark();
-  renderAi();
   renderAutoplay();
   setFont(fontPct);
   loadSavedWords().then(loadBookFromUrl);
