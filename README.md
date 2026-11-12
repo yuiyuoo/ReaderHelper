@@ -48,11 +48,34 @@ The dictionary part of a lookup appears after about 1–2 s either way; only the
 
 ## Run
 
+**Easiest (Windows):** double-click **`start.bat`**. It starts the server and shows the addresses for this PC
+and for your phone. Close the window to stop it.
+
+Or from a terminal:
+
 ```bash
-uvicorn backend.main:app --reload
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
-Open http://localhost:8000.
+Open http://localhost:8000. (`--host 0.0.0.0` lets other devices on your Wi-Fi connect; leave it out to
+allow only this PC. `--reload` restarts on code changes but sometimes hangs on Windows.)
+
+### On your phone
+1. Phone and PC on the **same Wi-Fi**, PC switched on.
+2. Once, on the PC, in **PowerShell as administrator** (only for your home Wi-Fi):
+   ```powershell
+   Set-NetConnectionProfile -InterfaceAlias WiFi -NetworkCategory Private
+   New-NetFirewallRule -DisplayName "ReaderHelper" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow -Profile Private
+   ```
+   This allows the app on trusted (private) networks only. The app has no login, so don't open it on
+   public Wi-Fi.
+3. Open the address `start.bat` shows (e.g. `http://192.168.31.46:8000`) in the phone's browser.
+4. **Add it to the home screen** – iPhone: Safari → Share → *Add to Home Screen*; Android: Chrome → ⋮ →
+   *Add to Home screen*. It gets its own icon and opens full-screen without the browser bars.
+
+On the phone: **swipe** left/right to turn pages, tap a word for the meaning (it slides up from the
+bottom), long-press to select text and press **Dịch · Translate** at the bottom of the screen. The
+vocabulary list shows one card per word. The PC does all the work, so lookups are as fast as on the PC.
 
 - **Library (home page):** shows your books as covers, most recently opened first. Click a cover to read.
   - **Add book** (or drag an EPUB onto the page): the app reads the title, author and cover picture from

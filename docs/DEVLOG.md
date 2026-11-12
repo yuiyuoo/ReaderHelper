@@ -502,6 +502,49 @@ answer several times faster; the app needs no change for that.
   (new), `frontend/reader.js`, `frontend/index.html`, `frontend/vocab.html`, `frontend/library.html`,
   `frontend/library.js`, `frontend/style.css`
 
+---
+
+## Part 12: Phone access and phone polish
+
+### 37. The phone (and other devices) couldn't open the app
+| Problem | Cause | Fix |
+| --- | --- | --- |
+| Connection refused from other devices | The server listened on `127.0.0.1` (this PC only) | Start with `--host 0.0.0.0` (`start.bat` does that) |
+| Still blocked | Wi-Fi set to *Public*; the existing firewall rules allowed Python **3.14**, but the app runs on Python **3.13** (`.venv`) | User set the home Wi-Fi to *Private* and allowed port 8000 on private networks only (admin PowerShell, in the README). Not on public networks, because the app has no login |
+
+### 38. Phone polish
+- **Home-screen app:** `manifest.json`, app icons (192/512, maskable, Apple touch icon; drawn as SVG and
+  rendered to PNG), `apple-mobile-web-app-*` and `theme-color` tags on every page, `viewport-fit=cover` with
+  safe-area padding so nothing sits under the notch or home indicator. From the home screen it opens
+  full-screen; every page has its own way back, so no browser back button is needed.
+  (No service worker yet: browsers only allow it over https, i.e. after setting up e.g. Tailscale.)
+- **Swipe to turn pages** in the reader: only a quick (< 0.8 s), clearly horizontal move of at least
+  50 px counts, so tapping words and long-pressing to select text still work.
+- **Bottom sheet:** on screens up to 600 px the word/translation popup slides up from the bottom, full
+  width, max. 70 % of the screen, with a handle. Save / Ask again stay fixed at its bottom while the content
+  scrolls.
+- **Translate button** for selections sits at the bottom centre on phones, away from the system's own
+  copy/paste menu above the selection.
+- **Reader top bar** in two rows instead of three (91 px instead of ~140 px on an iPhone 13).
+- **Vocabulary list** as one card per word instead of a wide table.
+- **`start.bat`:** double-click to start the server for phone access; it prints the PC and phone addresses.
+
+### 39. Swiping right left the reader
+- **Problem:** in the phone test, swiping right went back to the library instead of the previous page.
+- **Cause:** the browser treats a horizontal drag as its "go back" gesture. `overscroll-behavior-x: none`
+  wasn't enough, because the swipe happens inside the book's iframe.
+- **Fix:** for a clearly horizontal drag the reader cancels the browser's default (`touchmove`,
+  non-passive), except while a text selection is being adjusted. (On an iPhone, the system's edge-swipe from
+  the very edge of the screen can't be blocked by any web page; swipes that start inside the page are fine.)
+
+- **Tested** with iPhone 13 emulation (touch): manifest and icon served; swipe forward/back; a tiny swipe is
+  ignored; tapping a word opens the bottom sheet (full width, at the bottom); tapping outside closes it;
+  Translate button at the bottom centre; vocabulary without sideways scrolling. Desktop tests still pass.
+  Not tested on a real iPhone.
+
+  *Files:* `frontend/manifest.json`, `frontend/icons/` (new), all four HTML pages, `frontend/reader.js`,
+  `frontend/style.css`, `start.bat` (new)
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
@@ -522,7 +565,7 @@ answer several times faster; the app needs no change for that.
 
 ## Still open (ideas)
 - Edit a word directly from the review card; show review statistics (words learned per week).
-- Popover and Translate button in the new design; bottom sheet on phones.
+- Access from outside the home Wi-Fi (Tailscale), then a service worker so the app starts offline and Review works without the PC.
 - Book footnote numbers in chapter names ("Die drei Schläfer.(2)").
 - German adjective forms the lemmatizers miss (*ungeheueren* → should be *ungeheuer*).
 - Scroll mode, search in the book.
