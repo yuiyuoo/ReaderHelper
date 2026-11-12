@@ -11,7 +11,7 @@ from typing import Literal
 from urllib.parse import quote
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -41,6 +41,22 @@ async def no_stale_frontend(request, call_next):
     if request.url.path in ("/", "/read", "/vocab", "/review") or request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+# ---------- who is using the app (profiles, see below) ----------
+
+def current_user(x_profile: int | None = Header(None), profile: int | None = Query(None)) -> int:
+    """The person using the app: header X-Profile (set by the pages) or ?profile= (download links).
+    There are no passwords; who can reach the app at all is decided by Tailscale."""
+    uid = x_profile or profile
+    if uid is None or not db.get_user(uid):
+        raise HTTPException(401, "Choose who is reading first.")
+    return uid
+
+
+def optional_user(x_profile: int | None = Header(None), profile: int | None = Query(None)) -> int | None:
+    uid = x_profile or profile
+    return uid if uid is not None and db.get_user(uid) else None
 
 
 # ---------- pages & books ----------
@@ -119,9 +135,9 @@ def _book_or_404(book_id: int) -> dict:
 
 
 @app.get("/api/books")
-def list_books():
+def list_books(user: int | None = Depends(optional_user)):
     _sync_library()
-    return [_public(b) for b in db.list_books()]
+    return [_public(b) for b in db.list_books(user)]
 
 
 @app.get("/api/books/{book_id}")
@@ -378,6 +394,41 @@ async def _run_llm(lang, word, sentence, lemma, senses, target, written=None) ->
         return f"Vietnamese explanation unavailable: {e}"
 
 
+# ---------- profiles (you and your friends) ----------
+
+class ProfileIn(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+
+
+@app.get("/api/profiles")
+def list_profiles():
+    return db.list_users()
+
+
+@app.post("/api/profiles")
+def add_profile(p: ProfileIn):
+    name = " ".join(p.name.split())
+    if not name:
+        raise HTTPException(400, "Please enter a name.")
+    user = db.add_user(name)
+    if user is None:
+        raise HTTPException(409, f"“{name}” already exists.")
+    return user
+
+
+@app.patch("/api/profiles/{user_id}")
+def rename_profile(user_id: int, p: ProfileIn):
+    name = " ".join(p.name.split())
+    if not name:
+        raise HTTPException(400, "Please enter a name.")
+    user = db.rename_user(user_id, name)
+    if user is None:
+        raise HTTPException(404, "Not found")
+    if user is False:
+        raise HTTPException(409, f"“{name}” already exists.")
+    return user
+
+
 # ---------- vocab ----------
 
 class VocabIn(BaseModel):
@@ -394,16 +445,16 @@ class VocabIn(BaseModel):
 
 
 @app.post("/api/vocab")
-def save_vocab(item: VocabIn):
+def save_vocab(item: VocabIn, user: int = Depends(current_user)):
     data = item.model_dump()
     if data["book_id"] is not None and not db.get_book(data["book_id"]):
         data["book_id"], data["cfi"] = None, ""  # unknown book: keep the word, drop the link
-    return db.add_vocab(data)
+    return db.add_vocab(user, data)
 
 
 @app.get("/api/vocab")
-def get_vocab(book_id: int | None = None):
-    return db.list_vocab(book_id)
+def get_vocab(book_id: int | None = None, user: int = Depends(current_user)):
+    return db.list_vocab(user, book_id)
 
 
 # ---------- highlighting saved words in the book ----------
@@ -414,7 +465,7 @@ class HighlightIn(BaseModel):
 
 
 @app.post("/api/highlights")
-async def highlights(q: HighlightIn):
+async def highlights(q: HighlightIn, user: int = Depends(current_user)):
     """Where in these paragraphs do saved words occur? Matched by base form with the same analysis as a
     clicked word, so a saved "fangen" marks "fing"/"fängt" but not "fing … an" (anfangen).
     Saved noun-verb expressions ("in Frage stellen") are found with all their parts.
@@ -422,7 +473,7 @@ async def highlights(q: HighlightIn):
     "zu Hause") are matched in the browser by their spelling."""
     if sum(map(len, q.paragraphs)) > 1_000_000:
         raise HTTPException(400, "Too much text at once.")
-    lemmas = {v["lemma"] for v in db.list_vocab() if v["lang"] == q.lang}
+    lemmas = {v["lemma"] for v in db.list_vocab(user) if v["lang"] == q.lang}
     if not lemmas:
         return {"spans": [[] for _ in q.paragraphs]}
     try:
@@ -435,15 +486,15 @@ async def highlights(q: HighlightIn):
 # ---------- review (spaced repetition) ----------
 
 @app.get("/api/review")
-def get_review(book_id: int | None = None, limit: int = 50):
+def get_review(book_id: int | None = None, limit: int = 50, user: int = Depends(current_user)):
     """Words to review now, each with what the four answers would mean ("10 min", "3 days", …)."""
-    cards = [{**c, "preview": srs.preview(c)} for c in db.review_queue(book_id, max(1, min(limit, 200)))]
-    return {"cards": cards, "counts": db.review_counts(book_id)}
+    cards = [{**c, "preview": srs.preview(c)} for c in db.review_queue(user, book_id, max(1, min(limit, 200)))]
+    return {"cards": cards, "counts": db.review_counts(user, book_id)}
 
 
 @app.get("/api/review/counts")
-def get_review_counts(book_id: int | None = None):
-    return db.review_counts(book_id)
+def get_review_counts(book_id: int | None = None, user: int = Depends(current_user)):
+    return db.review_counts(user, book_id)
 
 
 class ReviewIn(BaseModel):
@@ -451,11 +502,11 @@ class ReviewIn(BaseModel):
 
 
 @app.post("/api/vocab/{vocab_id}/review")
-def review_word(vocab_id: int, answer: ReviewIn):
-    card = db.get_vocab(vocab_id)
+def review_word(vocab_id: int, answer: ReviewIn, user: int = Depends(current_user)):
+    card = db.get_vocab(user, vocab_id)
     if not card:
         raise HTTPException(404, "Not found")
-    updated = db.save_review(vocab_id, srs.schedule(card, answer.grade))
+    updated = db.save_review(user, vocab_id, srs.schedule(card, answer.grade))
     return {**updated, "preview": srs.preview(updated)}  # for showing it again in the same session
 
 
@@ -466,32 +517,32 @@ class VocabUpdate(BaseModel):
 
 
 @app.patch("/api/vocab/{vocab_id}")
-def edit_vocab(vocab_id: int, changes: VocabUpdate):
+def edit_vocab(vocab_id: int, changes: VocabUpdate, user: int = Depends(current_user)):
     # Only fields that were sent are changed; text is trimmed and normalised to NFC like model output.
     fields = {k: unicodedata.normalize("NFC", v.strip())
               for k, v in changes.model_dump(exclude_none=True).items()}
     if fields.get("sentence") == "":
         raise HTTPException(400, "The sentence can't be empty.")
-    row = db.update_vocab(vocab_id, fields)
+    row = db.update_vocab(user, vocab_id, fields)
     if row is None:
         raise HTTPException(404, "Not found")
     return row
 
 
 @app.delete("/api/vocab/{vocab_id}")
-def remove_vocab(vocab_id: int):
-    if not db.delete_vocab(vocab_id):
+def remove_vocab(vocab_id: int, user: int = Depends(current_user)):
+    if not db.delete_vocab(user, vocab_id):
         raise HTTPException(404, "Not found")
     return {"ok": True}
 
 
 @app.get("/api/vocab.csv")
-def export_vocab():
+def export_vocab(user: int = Depends(current_user)):
     buf = io.StringIO()
     # Anki file headers (Anki 2.1.55+): comma-separated, fields contain HTML.
     buf.write("#separator:comma\n#html:true\n")
     w = csv.writer(buf, lineterminator="\n")
-    for v in db.list_vocab():
+    for v in db.list_vocab(user):
         front = f"<b>{v['word']}</b><br><i>{v['sentence']}</i>"
         back = f"{v['translation_vi']}<br>{v['gloss_vi']}"
         w.writerow([front, back])
