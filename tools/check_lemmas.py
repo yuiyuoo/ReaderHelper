@@ -68,3 +68,31 @@ paras = ["Die Katze fing die Maus.", "Dann fing das Mädchen an zu weinen.", "Ma
 for saved in ({"fangen"}, {"anfangen"}, {"zumachen"}, {"machen"}):
     spans = nlp.find_lemmas("de", paras, saved)
     print(sorted(saved), [[p[a:b] for a, b in sp] for p, sp in zip(paras, spans)])
+
+# ---- noun-verb expressions ("in Frage stellen") ----
+from backend import expressions  # noqa: E402
+
+expr_cases = [  # (lang, sentence, clicked word, expected expression or None)
+    ("de", "Er stellte die Entscheidung gestern in Frage.", "stellte", "in Frage stellen"),
+    ("de", "Er stellte die Entscheidung gestern in Frage.", "Frage", "in Frage stellen"),
+    ("de", "Sie traf schließlich eine Entscheidung.", "Entscheidung", "eine Entscheidung treffen"),
+    ("de", "Die Entscheidung wurde gestern getroffen.", "getroffen", "eine Entscheidung treffen"),
+    ("de", "Das wurde in Frage gestellt.", "Frage", "in Frage stellen"),
+    ("de", "Er stellt ihr das Auto zur Verfügung.", "Verfügung", "zur Verfügung stellen"),
+    ("de", "Er hat das Problem in Angriff genommen.", "Angriff", "in Angriff nehmen"),
+    ("de", "Er stellte das Glas auf den Tisch.", "stellte", None),
+    ("de", "Die Katze fing die Maus.", "Maus", None),
+]
+ok = 0
+for lang, s, w, exp in expr_cases:
+    r = expressions.find_at(lang, s, w)
+    got = r.get("display") if r and "check" not in r else None
+    hit = got == exp
+    ok += hit
+    print(f"{'OK ' if hit else 'XX '} {w:12} -> {got!s:28} (expected {exp}) | {s}")
+print(f"\n{ok}/{len(expr_cases)} expressions correct")
+
+paras = ["Er stellte die Entscheidung gestern in Frage.", "Das wurde in Frage gestellt.", "Er stellte eine Frage."]
+for saved in ({"in Frage stellen"}, {"eine Frage stellen"}):
+    spans = nlp.find_lemmas("de", paras, saved)
+    print(sorted(saved), [[p[a:b] for a, b in sp] for p, sp in zip(paras, spans)])

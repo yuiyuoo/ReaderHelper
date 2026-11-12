@@ -20,6 +20,7 @@
   const MAX_PHRASE_WORDS = 4;     // longer selections are translated as a passage
   const FONT_MIN = 70, FONT_MAX = 170, FONT_STEP = 10;  // text size in %
   let pendingSel = null;          // selection waiting for the Translate button
+  let addingTo = null;            // popup state waiting for "+ Add word" (the next tapped word)
 
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -565,14 +566,25 @@
     const sel = doc.getSelection();
     if (sel && !sel.isCollapsed) return;                   // user is selecting text
     const hit = wordAtPoint(doc, x, y);
-    if (!hit) return closePopover();
+    if (!hit) { addingTo = null; return closePopover(); }
     const sentence = sentenceAt(hit);
+    if (addingTo) return addPart(addingTo, hit.word, sentence);
     const frame = doc.defaultView.frameElement.getBoundingClientRect();
     const wr = hit.range.getBoundingClientRect();
     lookup(hit.word, sentence, {
       left: frame.left + wr.left, right: frame.left + wr.right,
       top: frame.top + wr.top, bottom: frame.top + wr.bottom,
-    }, false, cfiOf(doc, hit.range));
+    }, { cfi: cfiOf(doc, hit.range) });
+  }
+
+  /** "+ Add word": look the current word up again together with the newly tapped one. */
+  function addPart(state, word, sentence) {
+    if (sentence !== state.sentence) {
+      setStatus("Pick a word from the same sentence.");
+      return;
+    }
+    if (word === state.word || state.parts.includes(word)) return;
+    lookup(state.word, state.sentence, state.anchor, { cfi: state.cfi, parts: [...state.parts, word] });
   }
 
   /** EPUB position (CFI) of a range in one of the book's iframes, so a saved word can be found again. */
@@ -645,7 +657,7 @@
       const context = node.nodeType === Node.TEXT_NODE
         ? sentenceAt({ node, offset: range.startOffset, word: phrase })
         : phrase;
-      lookup(phrase, context.includes(phrase) ? context : phrase, anchor, false, cfi);
+      lookup(phrase, context.includes(phrase) ? context : phrase, anchor, { cfi });
     } else {
       translatePassage(text, anchor);
     }
@@ -736,12 +748,17 @@
 
   // ---------- lookup + popover ----------
 
-  async function lookup(word, sentence, anchor, refresh = false, cfi = "", ask = false) {
+  /** Look up `word` in `sentence`. Options: refresh (skip the cache), cfi (position, for saving),
+   *  ask (use the AI even if it is switched off), parts (more words of an expression, "+ Add word"),
+   *  single (only this word, no expression around it). */
+  async function lookup(word, sentence, anchor, opts = {}) {
+    const { refresh = false, cfi = "", ask = false, parts = [], single = false } = opts;
     if (inflight) inflight.abort();
     const ctrl = (inflight = new AbortController());
     const seq = ++lookupSeq;
+    addingTo = null;
     const hintLang = ["en", "de"].includes(bookLang) ? bookLang : null;
-    const state = { word, sentence, anchor, cfi, lang: hintLang, data: null };
+    const state = { word, sentence, anchor, cfi, parts, single, lang: hintLang, data: null };
 
     renderPopover(state, "loading");
     positionPopover(anchor);
@@ -751,7 +768,8 @@
       const r = await fetch("/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ word, sentence, lang_hint: bookLang || null, refresh, target: target(), quick }),
+        body: JSON.stringify({ word, sentence, lang_hint: bookLang || null, refresh, target: target(), quick,
+                               parts, single }),
         signal: ctrl.signal,
       });
       const data = await r.json().catch(() => ({}));
@@ -799,12 +817,22 @@
     const L = LABELS[d?.target_lang] || LABELS[target()];
     const lemma = d?.lemma && d.lemma.toLowerCase() !== state.word.toLowerCase()
       ? `<span class="lemma">← ${esc(d.lemma)}</span>` : "";
+    const ex = d?.expression;
     let html = `<div class="head">
-      <span class="word">${esc(state.word)}</span>${lemma}
+      <span class="word">${esc(ex ? ex.display : state.word)}</span>${ex ? "" : lemma}
       ${state.lang ? `<span class="lang">${esc(state.lang)}</span>` : ""}
       <button class="icon" data-act="speak" title="Pronounce">🔊</button>
       <button class="close" data-act="close" title="Close (Esc)">×</button>
     </div>`;
+    if (ex) {
+      const how = { list: "Fixed expression", dictionary: "Expression (from the dictionary)",
+                    manual: "Your own combination" }[ex.source] || "Expression";
+      html += `<div class="expr-note">${esc(how)} · in this sentence: <b>${esc(ex.words)}</b>
+        <button class="link-btn" data-act="single" title="Look up only the word you tapped">Just “${esc(state.word)}”</button></div>`;
+    }
+    if (addingTo === state) {
+      html += `<div class="section adding">Tap another word of this sentence to add it… <button class="link-btn" data-act="cancel-add">Cancel</button></div>`;
+    }
 
     if (phase === "loading") {
       html += `<div class="section loading"><span class="spinner"></span>Looking up…</div>`;
@@ -825,7 +853,8 @@
       }
       if (d.warning) html += `<div class="section warning">${esc(d.warning)}</div>`;
       const senses = d.senses || [];
-      const label = d.sense_no ? `Definition · sense ${d.sense_no} of ${senses.length} (chosen for this sentence)` : "Definition";
+      const label = d.definition_of ? `Definition of “${d.definition_of}” (no dictionary entry for the expression)`
+        : d.sense_no ? `Definition · sense ${d.sense_no} of ${senses.length} (chosen for this sentence)` : "Definition";
       html += `<div class="section"><div class="label">${esc(label)}</div>` +
         (d.definition ? `<div class="def">${esc(d.definition)}</div>`
                       : `<div class="note">${esc(d.definition_note || "No definition found.")}</div>`);
@@ -839,12 +868,14 @@
         (d.sentence_tr ? `<div class="sentence-tr">${esc(d.sentence_tr)}</div>` : "") + `</div>`;
       if (phase === "dict") {
         html += `<div class="section note">AI is off – dictionary only.</div>
-          <div class="actions"><button class="save" data-act="save">Save word</button>
-          <button data-act="ask" title="Get the meaning in this sentence from the AI (takes a while)">✨ Ask AI</button></div>`;
+          <div class="actions"><button class="save" data-act="save">Save ${ex ? "expression" : "word"}</button>
+          <button data-act="ask" title="Get the meaning in this sentence from the AI (takes a while)">✨ Ask AI</button>
+          <button data-act="add" title="Add another word of this sentence (for expressions like “in Frage stellen”)">+ Add word</button></div>`;
       }
       if (phase === "done") {
-        html += `<div class="actions"><button class="save" data-act="save">Save word</button>
+        html += `<div class="actions"><button class="save" data-act="save">Save ${ex ? "expression" : "word"}</button>
           <button data-act="retry" title="Ignore the cached answer and ask the model again">↻ Ask again</button>
+          <button data-act="add" title="Add another word of this sentence (for expressions like “in Frage stellen”)">+ Add word</button>
           ${d.cached ? '<span class="sense">cached</span>' : ""}</div>`;
       }
     }
@@ -857,8 +888,12 @@
       if (act === "close") closePopover();
       if (act === "speak") speak(state.word, state.lang || "en");
       if (act === "save") saveWord(state, ev.target);
-      if (act === "retry") lookup(state.word, state.sentence, state.anchor, true, state.cfi, true);
-      if (act === "ask") lookup(state.word, state.sentence, state.anchor, false, state.cfi, true);
+      const again = { cfi: state.cfi, parts: state.parts, single: state.single };
+      if (act === "retry") lookup(state.word, state.sentence, state.anchor, { ...again, refresh: true, ask: true });
+      if (act === "ask") lookup(state.word, state.sentence, state.anchor, { ...again, ask: true });
+      if (act === "single") lookup(state.word, state.sentence, state.anchor, { cfi: state.cfi, single: true });
+      if (act === "add") { addingTo = state; renderPopover(state, phase); }
+      if (act === "cancel-add") { addingTo = null; renderPopover(state, phase); }
     };
   }
 
@@ -877,6 +912,7 @@
   }
 
   function closePopover() {
+    addingTo = null;
     if (inflight) { inflight.abort(); inflight = null; }
     lookupSeq++;
     els.popover.hidden = true;
@@ -917,7 +953,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({
-          lang: d.lang, word: d.word, lemma: d.lemma, sentence: d.sentence,
+          lang: d.lang, word: d.expression ? d.expression.words : d.word, lemma: d.lemma, sentence: d.sentence,
           ...meaningToSave(d),
           sentence_tr: d.sentence_tr || "", book_id: currentBookId, cfi: state.cfi || "",
         }),
@@ -936,7 +972,9 @@
     try {
       const items = await (await fetch("/api/vocab")).json();
       savedWords = new Set(items.map((v) => v.word.toLowerCase()));
-      savedPhrases = new Set(items.filter((v) => v.word.trim().includes(" ")).map((v) => v.word.toLowerCase()));
+      // Phrases are matched by spelling; expressions with gaps ("stellte … in Frage") by the server.
+      savedPhrases = new Set(items.filter((v) => v.word.trim().includes(" ") && !v.word.includes("…"))
+        .map((v) => v.word.toLowerCase()));
       els.vocabCount.textContent = items.length;
       els.vocabCount.hidden = items.length === 0;
     } catch { /* highlighting and the count are optional */ }

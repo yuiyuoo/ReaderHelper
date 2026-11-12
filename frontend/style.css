@@ -115,6 +115,10 @@ select { max-width: 260px; }
 .popover .save { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .popover .loading { color: var(--muted); }
 .popover .sentence-tr { margin-top: 4px; color: var(--text); font-style: italic; }
+.popover .expr-note { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.popover .expr-note b { color: var(--text); font-weight: 600; }
+.popover .expr-note .link-btn { display: inline; padding: 0 0 0 6px; font-size: 13px; }
+.popover .adding { background: var(--accent-soft); color: var(--accent); padding: 6px 8px; border-radius: 6px; font-size: 13px; }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
