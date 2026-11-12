@@ -315,7 +315,11 @@ body.two-pages .page-card::before { content: ""; position: absolute; top: 0; bot
   background: linear-gradient(90deg, transparent, rgba(60,50,30,.07) 45%, rgba(60,50,30,.12) 50%, rgba(60,50,30,.07) 55%, transparent); }
 :root[data-theme="dark"] body.two-pages .page-card::before {
   background: linear-gradient(90deg, transparent, rgba(0,0,0,.25) 45%, rgba(0,0,0,.4) 50%, rgba(0,0,0,.25) 55%, transparent); }
-.spread-btn[aria-pressed="true"], .mark-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.spread-btn[aria-pressed="true"], .mark-btn[aria-pressed="true"], .ai-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.read-bar .ai-btn { width: auto; padding: 0 8px; gap: 3px; }
+.ai-btn .ai-label { font-size: 12px; font-weight: 700; }
+.ai-btn[aria-pressed="false"] { color: var(--muted); }
+.ai-btn[aria-pressed="false"] .ai-label { text-decoration: line-through; }
 .page-nav { align-self: center; width: 44px; height: 72px; padding: 0; display: inline-flex; align-items: center;
   justify-content: center; border: 0; border-radius: 10px; background: transparent; color: var(--muted); }
 .page-nav:hover:not(:disabled) { background: var(--hover); color: var(--text); }

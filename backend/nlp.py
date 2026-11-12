@@ -1,4 +1,5 @@
 """Language detection, lemmatization, sentence splitting and dictionary lookup."""
+import asyncio
 import html
 import logging
 import re
@@ -111,6 +112,16 @@ def _short(s: str, limit: int = 180) -> str:
     return s if len(s) <= limit else s[: limit - 1].rsplit(" ", 1)[0] + "…"
 
 
+async def _get(client: httpx.AsyncClient, url: str) -> httpx.Response:
+    """GET, with one retry after a short pause when the service says "too many requests" (429).
+    Wiktionary does that after a quick series of lookups."""
+    r = await client.get(url)
+    if r.status_code == 429:
+        await asyncio.sleep(1.5)
+        r = await client.get(url)
+    return r
+
+
 class DictUnavailable(Exception):
     pass
 
@@ -126,7 +137,7 @@ Groups = list[tuple[str, list[str]]]
 
 
 async def _en_senses(client: httpx.AsyncClient, term: str) -> Groups:
-    r = await client.get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{term}")
+    r = await _get(client, f"https://api.dictionaryapi.dev/api/v2/entries/en/{term}")
     if not _check(r):
         return []
     return [
@@ -139,7 +150,7 @@ async def _en_senses(client: httpx.AsyncClient, term: str) -> Groups:
 async def _de_senses(client: httpx.AsyncClient, term: str) -> Groups:
     # en.wiktionary's REST API has German entries (definitions are written in English).
     # Wiktionary page titles use underscores for spaces ("zu_Hause").
-    r = await client.get(f"https://en.wiktionary.org/api/rest_v1/page/definition/{term.replace(' ', '_')}")
+    r = await _get(client, f"https://en.wiktionary.org/api/rest_v1/page/definition/{term.replace(' ', '_')}")
     if not _check(r):
         return []
     return [

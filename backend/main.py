@@ -309,11 +309,13 @@ async def translate(q: TranslateIn):
 
 
 @app.post("/api/warmup")
-async def warmup():
+async def warmup(ai: bool = True):
     """Load the model into memory in the background (the reader calls this when a book opens),
     so the first word lookup doesn't also have to wait for the model to load. The spaCy models are
-    loaded too: that takes a few seconds on first use and would otherwise delay the quick step."""
-    asyncio.create_task(llm.warmup())
+    loaded too: that takes a few seconds on first use and would otherwise delay the quick step.
+    `ai=false` (AI switched off in the reader): only spaCy, the language model stays unloaded."""
+    if ai:
+        asyncio.create_task(llm.warmup())
     for lang in nlp.MODELS:
         asyncio.create_task(asyncio.to_thread(nlp.get_nlp, lang))
     return {"ok": True}
