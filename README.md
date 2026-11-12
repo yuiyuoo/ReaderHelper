@@ -97,9 +97,11 @@ vocabulary list shows one card per word. The PC does all the work, so lookups ar
   The book's own colours are overridden in dark mode so the text is always readable.
 - **Navigation:** use the ‹ › buttons, the ← → keys, or the Contents menu.
 - **Look up a word:** click it. Close the popover with Esc or by clicking outside it.
-  The base form, pronunciation and dictionary meanings appear first (1–2 s); the meaning in this sentence
-  and a translation of the whole sentence follow when the model is done. The model is loaded in the
-  background as soon as you open a book, so the first lookup doesn't also wait for that.
+  You get the base form, pronunciation and dictionary meanings right away (about 1–2 s) and can **Save
+  word** straight away (the English dictionary meaning becomes the note; add a Vietnamese one later with
+  Edit). **✨ Ask AI** adds the meaning in this sentence, an explanation and a translation of the whole
+  sentence (15–25 s; the first time also loads the model). AI answers you already got come back instantly
+  from the cache. **Translating a selected passage** always uses the AI (see below).
 - **Expressions** (noun-verb combinations like *in Frage stellen*, *eine Entscheidung treffen*,
   *take into account*): tapping any part shows the whole expression, e.g. *stellte … in Frage* →
   **in Frage stellen**, also in the passive or perfect (*wurde in Frage gestellt*). They are recognised from
@@ -107,12 +109,6 @@ vocabulary list shows one card per word. The PC does all the work, so lookups ar
   others, from a dictionary entry. **+ Add word** in the popup combines the tapped word with another word of
   the same sentence by hand; **Just "…"** looks up only the tapped word. A saved expression is highlighted
   with all its parts wherever it occurs (*in Frage stellen* ≠ *eine Frage stellen*).
-- **AI on/off** (✨ AI button in the reader's top bar, remembered): when off, a lookup shows only the base
-  form, pronunciation and dictionary meanings – almost instantly – and you can still **Save word** (the
-  English dictionary meaning becomes the note; add a Vietnamese one later with Edit). **✨ Ask AI** in the
-  popup gets the AI meaning for just that word. Translating a selected passage always needs the AI. With the
-  AI off, the model isn't loaded at all (saves about 6 GB of memory); AI answers you already got are still
-  shown from the cache.
 - **Meaning in:** the selector in the toolbar sets the language of meanings and translations: Tiếng Việt
   (default), English or Deutsch. If it matches the book's language (e.g. a German book with meanings in
   Deutsch), you get a simpler synonym and an explanation in simple language instead of a translation.

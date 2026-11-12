@@ -689,6 +689,20 @@ answer several times faster; the app needs no change for that.
   *Files:* `backend/expressions.py`, `backend/data/expressions_de.txt` (new), `backend/main.py`,
   `backend/nlp.py`, `backend/llm.py`, `frontend/reader.js`, `frontend/style.css`, `tools/check_lemmas.py`
 
+### 46. No AI switch: words without AI by default, passages always with AI
+- **Request:** remove the AI on/off button; looking up a word should not use the AI unless asked
+  ("Ask AI"); translating a selected sentence/passage should always use it.
+- **Change:** the ✨ AI button is gone. A word (or short phrase) shows base form, dictionary meanings and
+  pronunciation; **✨ Ask AI** gets the meaning in this sentence. Once asked, "+ Add word" and "Just …"
+  keep using the AI for that popup. Passages are always sent to the AI. AI answers already in the cache are
+  shown complete without asking.
+- Opening a book preloads only spaCy (`/api/warmup?ai=false`); the language model (~6 GB) is loaded the
+  first time the AI is used, so that first answer takes a little longer.
+- **Tested:** no AI button; tapping a word → popup after 1.4 s with only the dictionary request and the
+  buttons Save word / ✨ Ask AI / + Add word; Ask AI → AI answer; selected passage → translated by the AI.
+  *Files:* `frontend/reader.js`, `frontend/index.html`, `frontend/style.css`, `README.md`
+  (replaces the switch from #42; saving with the dictionary meaning and the 429 retry from #42 stay)
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
