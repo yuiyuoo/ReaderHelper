@@ -95,6 +95,29 @@ the PC from anywhere, nobody else can. (Don't open a port on your router instead
 
 The PC still has to be on, awake and running `start.bat`.
 
+### Sharing with friends
+Each person has a **profile** with their own saved words, review schedule and highlights. The library
+(books) and the AI answer cache are shared. There are no passwords: only people in your Tailscale network
+can open the app at all.
+
+1. **You:** Tailscale admin console (login.tailscale.com) → **Machines** → your PC → **⋯ → Share…** →
+   copy the invite link and send it to your friend.
+2. **Friend:** installs Tailscale (free, own account), opens the invite link and accepts. They only get your
+   PC, none of your other devices.
+3. **Friend:** opens `https://<pc-name>.<your-network>.ts.net` (the "Phone, anywhere" address), chooses
+   **Add a person**, enters a name. Add to home screen as usual.
+
+- The app asks **"Who is reading?"** the first time on each device; the choice is remembered on that device.
+  The round button with the initial in the top bar switches person, adds one or renames the current one.
+- Words saved before profiles existed belong to the first profile, **Me** – rename it to your own name.
+- Optional, so friends can reach only the app and not other services on your PC: in the admin console under
+  **Access controls**, allow shared users only port 443:
+  ```json
+  {"src": ["autogroup:shared"], "dst": ["<your-pc>:443"], "action": "accept"}
+  ```
+- Profiles keep words apart, they are not security: anyone in the network could pick someone else's name.
+  Only share with people you trust.
+
 - **Library (home page):** shows your books as covers, most recently opened first. Click a cover to read.
   - **Add book** (or drag an EPUB onto the page): the app reads the title, author and cover picture from
     the EPUB. A dialog lets you change the **name shown in the library**, choose your own **picture**

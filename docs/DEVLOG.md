@@ -716,6 +716,34 @@ answer several times faster; the app needs no change for that.
   line endings (Windows batch files can misbehave with LF only).
   *Files:* `start.bat`, `.gitattributes`, `README.md`
 
+## Part 15: Sharing with friends
+
+### 48. Several people, one app
+**Problem:** You want a few friends to use the app too. Opening it to the internet would need a login
+system; and with one shared word list, everyone's saved words and reviews would get mixed up.
+**Cause:** The app was built for one person: `vocab` had no owner, every endpoint returned all words.
+**Fix:**
+- **Access:** no public website. Tailscale lets you share just your PC with a friend's Tailscale account
+  (invite link); they open the same https address as your phone. Optional ACL: shared users → port 443 only.
+- **Profiles instead of accounts:** new table `users` (name unique ignoring case) and `vocab.user_id`.
+  The migration creates a profile "Me" and gives it all existing words.
+- Every personal endpoint (`/api/vocab*`, `/api/highlights`, `/api/review*`) takes the person from the
+  header `X-Profile` (or `?profile=` for download links like the CSV export) through a FastAPI dependency,
+  and answers 401 "Choose who is reading first." without one. Every SQL statement on `vocab` filters by
+  `user_id`, so one person can't edit, delete or review another's word (404). Duplicates are checked per person.
+- Shared on purpose: books, covers, reading cache and the AI/dictionary cache (a friend's lookup of the same
+  word in the same sentence is instant). `/api/books` counts only the current person's words per book.
+- **Frontend:** new `profile.js`, loaded first on every page. It remembers the profile in localStorage,
+  wraps `window.fetch` so all requests to the server carry `X-Profile` (the page scripts didn't need to
+  change), adds `?profile=` to `/api/…` links, shows a "Who is reading?" dialog (pick, add, rename) when
+  nothing is chosen, and a button with the person's initial in the top bar. A remembered profile that no
+  longer exists counts as none.
+- **Not security:** names have no password; anyone in the Tailscale network could choose someone else's
+  name. That's fine for friends; access itself is protected by Tailscale.
+- *Tested:* on a copy of the database with two profiles: separate word lists, review counts, CSV and
+  per-book counts; another person's word → 404; duplicate name → 409; no/unknown profile → 401.
+  *Files:* `backend/db.py`, `backend/main.py`, `frontend/profile.js`, all four pages, `style.css`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
