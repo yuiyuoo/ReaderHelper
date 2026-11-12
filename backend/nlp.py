@@ -179,24 +179,39 @@ def token_lemma(lang: str, tok) -> tuple[str, str]:
 
 # Per-paragraph analysis cache: (lang, text) -> [(start, end, lemma lowercased), ...]. Parsing a chapter
 # takes a few seconds; with this cache, re-highlighting after saving a word is instant.
-_PARA_CACHE: dict[tuple[str, str], list[tuple[int, int, str]]] = {}
+# (lang, text) -> ([(start, end, lemma lowercased), ...], [(expression key, spans), ...])
+_PARA_CACHE: dict[tuple[str, str], tuple[list, list]] = {}
 _PARA_CACHE_MAX = 20000
 
 
 def find_lemmas(lang: str, paragraphs: list[str], lemmas: set[str]) -> list[list[list[int]]]:
-    """For each paragraph, [start, end] character spans of the words whose lemma is in `lemmas`
-    (compared case-insensitively). For a separable verb both parts count ("fing" and "an" of anfangen)."""
-    wanted = {l.lower() for l in lemmas}
+    """For each paragraph, [start, end] character spans of saved words:
+    - single words whose lemma is in `lemmas` (case-insensitive). For a separable verb both parts count
+      ("fing" and "an" of anfangen);
+    - noun-verb expressions in `lemmas` ("in Frage stellen"): all their parts, in any form and order
+      ("stellte … in Frage")."""
+    from . import expressions  # imported here: expressions itself uses this module
+
+    singles = {l.lower() for l in lemmas if " " not in l.strip()}
+    multi = {expressions.key_of(l.split()) for l in lemmas if " " in l.strip()}
     todo = [p for p in dict.fromkeys(paragraphs) if (lang, p) not in _PARA_CACHE]
     if todo:
         for text, doc in zip(todo, get_nlp(lang).pipe(todo, batch_size=64)):
             if len(_PARA_CACHE) >= _PARA_CACHE_MAX:
                 _PARA_CACHE.clear()  # simple bound; it refills from what is being read
-            _PARA_CACHE[(lang, text)] = [
-                (t.idx, t.idx + len(t.text), token_lemma(lang, t)[0].lower())
-                for t in doc if t.is_alpha
-            ]
-    return [[[s, e] for s, e, lem in _PARA_CACHE[(lang, p)] if lem in wanted] for p in paragraphs]
+            _PARA_CACHE[(lang, text)] = (
+                [(t.idx, t.idx + len(t.text), token_lemma(lang, t)[0].lower()) for t in doc if t.is_alpha],
+                expressions.all_in(lang, doc),
+            )
+    out = []
+    for p in paragraphs:
+        tokens, exprs = _PARA_CACHE[(lang, p)]
+        spans = [[s, e] for s, e, lem in tokens if lem in singles]
+        for key, parts in exprs:
+            if key in multi:
+                spans += parts
+        out.append(spans)
+    return out
 
 
 def _strip_html(s: str) -> str:
@@ -245,7 +260,11 @@ async def _en_senses(client: httpx.AsyncClient, term: str) -> Groups:
 
 
 async def _de_senses(client: httpx.AsyncClient, term: str) -> Groups:
-    # en.wiktionary's REST API has German entries (definitions are written in English).
+    return await _wiktionary_senses(client, term, "de")
+
+
+async def _wiktionary_senses(client: httpx.AsyncClient, term: str, lang: str) -> Groups:
+    # en.wiktionary's REST API has entries for many languages (definitions are written in English).
     # Wiktionary page titles use underscores for spaces ("zu_Hause").
     r = await _get(client, f"https://en.wiktionary.org/api/rest_v1/page/definition/{term.replace(' ', '_')}")
     if not _check(r):
@@ -253,8 +272,27 @@ async def _de_senses(client: httpx.AsyncClient, term: str) -> Groups:
     return [
         (sec.get("partOfSpeech", ""),
          [t for t in (_strip_html(d.get("definition", "")) for d in sec.get("definitions", [])) if t])
-        for sec in r.json().get("de", [])
+        for sec in r.json().get(lang, [])
     ]
+
+
+_EXPR_CACHE: dict[tuple[str, str], list[str]] = {}
+
+
+async def fetch_expression_senses(lang: str, titles: list[str]) -> tuple[list[str], str | None]:
+    """Dictionary meanings of a multi-word expression ("in Frage stellen", "take into account"), trying
+    each title in turn on Wiktionary. Returns (senses, the title that had an entry). Never raises."""
+    try:
+        async with httpx.AsyncClient(timeout=8, headers=HTTP_HEADERS, follow_redirects=True) as client:
+            for title in titles:
+                if (lang, title) not in _EXPR_CACHE:
+                    groups = await _wiktionary_senses(client, title, lang)
+                    _EXPR_CACHE[(lang, title)] = _select(groups, "")
+                if _EXPR_CACHE[(lang, title)]:
+                    return _EXPR_CACHE[(lang, title)], title
+    except (httpx.HTTPError, ValueError, DictUnavailable) as e:
+        log.warning("expression lookup failed: %s", e)
+    return [], None
 
 
 # spaCy coarse POS -> part-of-speech names used by the dictionaries (lowercased).

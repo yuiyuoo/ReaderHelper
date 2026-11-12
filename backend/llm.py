@@ -48,7 +48,10 @@ def _config() -> tuple[str, str, float]:
 
 
 def mark_word(word: str, sentence: str) -> str:
-    """Wrap the first whole-word occurrence in [[ ]] so small models know which word to explain."""
+    """Wrap the first whole-word occurrence in [[ ]] so small models know which word to explain.
+    A sentence that is already marked (all parts of an expression) is left as it is."""
+    if "[[" in sentence:
+        return sentence
     m = re.search(rf"(?<!\w){re.escape(word)}(?!\w)", sentence)
     return f"{sentence[:m.start()]}[[{m.group(0)}]]{sentence[m.end():]}" if m else sentence
 
@@ -68,11 +71,13 @@ def _tutor_intro(target: str) -> str:
 
 
 def build_prompt(lang: str, word: str, sentence: str, lemma: str | None = None,
-                 senses: list[str] | None = None, target: str = "vi") -> str:
+                 senses: list[str] | None = None, target: str = "vi", written: str | None = None) -> str:
     T = LANG_NAMES[target]
     same = target == lang  # e.g. German book, meaning in German: learner's-dictionary style
     ex_tr, ex_gloss, ex_sense = WORD_EXAMPLE[target]
     base = f" (base form: {lemma})" if lemma and lemma.lower() != word.lower() else ""
+    if written:  # an expression whose parts are spread over the sentence
+        base = f" (in this sentence: {written})"
     sense_rules = (
         '"sense_no" (number of the dictionary sense that fits THIS sentence; 0 if none fits), '
         if senses else ""
@@ -212,11 +217,11 @@ async def warmup() -> None:
 
 
 async def explain(lang: str, word: str, sentence: str, lemma: str | None = None,
-                  senses: list[str] | None = None, target: str = "vi") -> dict:
+                  senses: list[str] | None = None, target: str = "vi", written: str | None = None) -> dict:
     """Return {translation_vi, gloss_vi, sense_vi[, sense_no]} (text in the target language).
     Raises LLMError with a friendly message."""
     base, model, timeout = _config()
-    prompt = build_prompt(lang, word, sentence, lemma, senses, target)
+    prompt = build_prompt(lang, word, sentence, lemma, senses, target, written)
     # Separate connect timeout so "Ollama not running" is reported as such, not as a slow model.
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=min(10.0, timeout + 5))) as client:
         for attempt in (1, 2):  # retry once on unusable output

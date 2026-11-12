@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-from . import books, db, llm, nlp, srs  # noqa: E402  (after load_dotenv so config is read)
+from . import books, db, expressions, llm, nlp, srs  # noqa: E402  (after load_dotenv so config is read)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("readerhelper")
@@ -223,6 +223,8 @@ class LookupIn(BaseModel):
     refresh: bool = False         # skip the cache and ask the model again
     quick: bool = False           # only language, lemma and dictionary (fast); the model answer follows
     target: Literal["vi", "en", "de"] = "vi"  # language of the meaning/translation
+    parts: list[str] = Field(default_factory=list, max_length=5)  # words added with "+ Add word"
+    single: bool = False          # "Just this word": don't look for an expression around it
 
 
 @app.post("/lookup")
@@ -236,6 +238,13 @@ async def lookup(q: LookupIn):
     except OSError:
         raise HTTPException(500, f"spaCy model for '{lang}' is missing. Run `python -m spacy download {nlp.MODELS[lang]}`.")
 
+    # Is the word part of a noun-verb combination ("stellte ... in Frage")? Then the expression is what
+    # gets looked up and explained, and its base form is the expression ("in Frage stellen").
+    expr = None if q.single else await _find_expression(lang, sentence, word, q.parts)
+    word_lemma = lemma  # base form of the tapped word itself
+    if expr:
+        lemma = expr["display"]
+
     variant = llm.cache_variant(q.target)
     cached = None if q.refresh else db.get_cached(lang, lemma, sentence, variant)
     if cached:
@@ -243,25 +252,45 @@ async def lookup(q: LookupIn):
 
     # Dictionary first: the model chooses among its numbered senses (more reliable than letting a
     # small model guess). A failure in either step doesn't affect the other.
-    senses, dict_err = await nlp.fetch_senses(lang, lemma, word, pos)
+    definition_of = None  # set when the definitions shown are those of the tapped word, not the expression
+    if expr:
+        senses = expr.get("senses")
+        if senses is None:
+            senses, _ = await nlp.fetch_expression_senses(lang, [expr["display"]])
+        dict_err = None
+        llm_senses = senses
+        if not senses:
+            # No entry for the expression ("Hunger haben"): show the tapped word's meanings as a help,
+            # but don't give them to the model, which would mix up the word and the expression.
+            senses, dict_err = await nlp.fetch_senses(lang, word_lemma, word, pos)
+            definition_of, llm_senses = word, []
+    else:
+        senses, dict_err = await nlp.fetch_senses(lang, lemma, word, pos)
+        llm_senses = senses
     base = {
         "lang": lang, "word": word, "lemma": lemma, "sentence": sentence,
         "definition": senses[0] if senses else "", "senses": senses,
         "definition_note": dict_err, "target_lang": q.target,
+        "expression": {k: expr[k] for k in ("display", "words", "source")} if expr else None,
+        "definition_of": definition_of,
     }
     if q.quick:
         # Step 1 of two: show this at once; the client then asks again without `quick` for the model's
         # answer (the dictionary result is cached in memory, so that call doesn't fetch it again).
         return {**base, "pending": True, "cached": False}
 
-    llm_result = await _run_llm(lang, word, sentence, lemma, senses, q.target)
+    if expr:  # explain the whole expression, with all its parts marked in the sentence
+        llm_result = await _run_llm(lang, expr["display"], expressions.mark(sentence, expr["spans"]), None,
+                                    llm_senses, q.target, written=expr["words"])
+    else:
+        llm_result = await _run_llm(lang, word, sentence, lemma, senses, q.target)
 
     result = {**base, "sense_no": None, "translation_vi": "", "gloss_vi": "", "sense_vi": "",
               "sentence_tr": "", "warning": None}
     if isinstance(llm_result, dict):
         result.update(llm_result)
-        if result["sense_no"]:
-            result["definition"] = senses[result["sense_no"] - 1]
+        if result["sense_no"] and llm_senses:
+            result["definition"] = llm_senses[result["sense_no"] - 1]
         db.put_cached(lang, lemma, sentence, variant, result)
     else:
         result["warning"] = llm_result
@@ -321,10 +350,27 @@ async def warmup(ai: bool = True):
     return {"ok": True}
 
 
-async def _run_llm(lang, word, sentence, lemma, senses, target) -> dict | str:
+async def _find_expression(lang: str, sentence: str, word: str, parts: list[str]) -> dict | None:
+    """Expression around the clicked word: from the list, built by hand (parts), or confirmed by a
+    dictionary entry. None when the word isn't part of one."""
+    if lang not in nlp.MODELS:
+        return None
+    found = await asyncio.to_thread(expressions.find_at, lang, sentence, word, parts)
+    if not found:
+        return None
+    if "check" not in found:
+        return found
+    for cand in found["check"]:  # only article-less candidates, at most two (see expressions.py)
+        senses, title = await nlp.fetch_expression_senses(lang, cand["titles"])
+        if senses:
+            return {**cand, "display": title, "senses": senses}
+    return None
+
+
+async def _run_llm(lang, word, sentence, lemma, senses, target, written=None) -> dict | str:
     """Return the model's fields, or a warning string if the step failed."""
     try:
-        return await llm.explain(lang, word, sentence, lemma, senses, target)
+        return await llm.explain(lang, word, sentence, lemma, senses, target, written)
     except llm.LLMError as e:
         return str(e)
     except Exception as e:  # never let the LLM step break the lookup
@@ -371,11 +417,12 @@ class HighlightIn(BaseModel):
 async def highlights(q: HighlightIn):
     """Where in these paragraphs do saved words occur? Matched by base form with the same analysis as a
     clicked word, so a saved "fangen" marks "fing"/"fängt" but not "fing … an" (anfangen).
-    Returns, per paragraph, [start, end] character spans. Phrases (several words) are matched in the
-    browser by their spelling."""
+    Saved noun-verb expressions ("in Frage stellen") are found with all their parts.
+    Returns, per paragraph, [start, end] character spans. Other phrases (several words next to each other,
+    "zu Hause") are matched in the browser by their spelling."""
     if sum(map(len, q.paragraphs)) > 1_000_000:
         raise HTTPException(400, "Too much text at once.")
-    lemmas = {v["lemma"] for v in db.list_vocab() if v["lang"] == q.lang and " " not in v["lemma"].strip()}
+    lemmas = {v["lemma"] for v in db.list_vocab() if v["lang"] == q.lang}
     if not lemmas:
         return {"spans": [[] for _ in q.paragraphs]}
     try:

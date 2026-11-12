@@ -1,0 +1,186 @@
+# German noun-verb combinations (Nomen-Verb-Verbindungen / Funktionsverbgefüge) that the reader
+# recognises automatically: noun (+ preposition) + verb in the infinitive, one per line.
+# Articles (der, die, das, ein, eine …) are ignored when matching, so "eine Entscheidung treffen" also
+# matches "Er traf die Entscheidung". Combinations not listed here are checked in Wiktionary when clicked,
+# or can be built by hand with "+ Add word" in the popup. Add your own lines freely.
+
+# treffen
+eine Entscheidung treffen
+eine Maßnahme treffen
+Vorbereitungen treffen
+eine Vereinbarung treffen
+eine Wahl treffen
+eine Verabredung treffen
+# nehmen
+Rücksicht nehmen
+Abschied nehmen
+Platz nehmen
+Stellung nehmen
+Einfluss nehmen
+Bezug nehmen
+Notiz nehmen
+Anteil nehmen
+in Anspruch nehmen
+in Kauf nehmen
+zur Kenntnis nehmen
+in Angriff nehmen
+ein Bad nehmen
+ein Ende nehmen
+# geben
+Bescheid geben
+eine Antwort geben
+Auskunft geben
+einen Rat geben
+Acht geben
+Recht geben
+die Schuld geben
+die Hand geben
+ein Versprechen geben
+Gas geben
+# sagen / wissen
+Bescheid sagen
+die Wahrheit sagen
+Bescheid wissen
+# bringen
+zum Ausdruck bringen
+zur Sprache bringen
+in Ordnung bringen
+in Gefahr bringen
+zum Lachen bringen
+zu Ende bringen
+in Erfahrung bringen
+zur Welt bringen
+in Verbindung bringen
+auf den Punkt bringen
+ums Leben bringen
+in Sicherheit bringen
+zum Stehen bringen
+# kommen
+in Frage kommen
+in Betracht kommen
+zu Hilfe kommen
+zur Sprache kommen
+ums Leben kommen
+zu Wort kommen
+in Gang kommen
+zum Ausdruck kommen
+zur Ruhe kommen
+ins Gespräch kommen
+zum Schluss kommen
+auf die Idee kommen
+zu Ende kommen
+in Kontakt kommen
+zur Vernunft kommen
+# stellen
+in Frage stellen
+zur Verfügung stellen
+eine Frage stellen
+einen Antrag stellen
+eine Forderung stellen
+zur Diskussion stellen
+unter Beweis stellen
+zur Rede stellen
+auf die Probe stellen
+in Aussicht stellen
+# stehen
+zur Verfügung stehen
+in Frage stehen
+zur Diskussion stehen
+unter Druck stehen
+in Verbindung stehen
+im Mittelpunkt stehen
+# ziehen
+in Betracht ziehen
+zur Rechenschaft ziehen
+in Erwägung ziehen
+Bilanz ziehen
+einen Schluss ziehen
+die Konsequenz ziehen
+# treten / setzen
+in Kontakt treten
+in Kraft treten
+in Kraft setzen
+außer Kraft setzen
+in Gang setzen
+in Bewegung setzen
+unter Druck setzen
+ein Ende setzen
+zur Wehr setzen
+# rufen / gehen / fallen
+ins Leben rufen
+in Erinnerung rufen
+zu Ende gehen
+in Erfüllung gehen
+auf die Nerven gehen
+in Rente gehen
+zu Bett gehen
+zur Last fallen
+in Ohnmacht fallen
+ins Gewicht fallen
+zum Opfer fallen
+# führen / spielen
+ein Gespräch führen
+zu Ende führen
+Protokoll führen
+Krieg führen
+eine Rolle spielen
+# üben / leisten / tragen / legen
+Kritik üben
+Druck ausüben
+Einfluss ausüben
+Hilfe leisten
+Widerstand leisten
+einen Beitrag leisten
+Folge leisten
+Gesellschaft leisten
+Sorge tragen
+Verantwortung tragen
+Rechnung tragen
+Wert legen
+# haben / machen
+Angst haben
+Lust haben
+Recht haben
+Glück haben
+Pech haben
+Hunger haben
+Durst haben
+eine Pause machen
+einen Fehler machen
+sich Sorgen machen
+Spaß machen
+Mut machen
+Angst machen
+einen Vorschlag machen
+Gebrauch machen
+Platz machen
+Urlaub machen
+# fassen / lassen / halten / behalten / verlieren / finden / schenken / holen
+Mut fassen
+einen Entschluss fassen
+ins Auge fassen
+Fuß fassen
+Vertrauen fassen
+im Stich lassen
+außer Acht lassen
+in Ruhe lassen
+eine Rede halten
+Wort halten
+ein Versprechen halten
+Schritt halten
+Kontakt halten
+im Auge behalten
+Recht behalten
+die Nerven verlieren
+aus den Augen verlieren
+den Kopf verlieren
+Anklang finden
+Beachtung finden
+Verwendung finden
+Gefallen finden
+Aufmerksamkeit schenken
+Glauben schenken
+Beachtung schenken
+Vertrauen schenken
+Luft holen
+Atem holen
