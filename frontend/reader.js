@@ -80,6 +80,7 @@
     // Load the language model now, so the first word lookup doesn't also wait for that.
     fetch("/api/warmup", { method: "POST" }).catch(() => {});
     book = ePub(info.file_url, { openAs: "epub" });
+    book.spine.hooks.serialize.register(disarmScripts);
     createRendition();
 
     try {
@@ -131,11 +132,26 @@
     return x >= view.left - 1 && x <= view.right + 1;
   }
 
+  /** epub.js hook, runs on each chapter's HTML before it is shown: book scripts can't run.
+   *  <script> elements are kept but made inert (type="text/plain"), so the element count and therefore
+   *  saved positions (CFIs) don't change; on…="" event attributes are renamed. */
+  function disarmScripts(output, section) {
+    section.output = output
+      .replace(/<script\b[^>]*\/>/gi, '<script type="text/plain"/>')
+      .replace(/<script\b(?:[^>]*[^>/])?>[\s\S]*?<\/script\s*>/gi, '<script type="text/plain"></script>')
+      .replace(/(<[^>]*?\s)on([a-z]+)(\s*=)/gi, "$1data-blocked-on$2$3");
+  }
+
   /** The view of the book (one or two pages). Rebuilt when switching page mode. */
   function createRendition() {
     rendition = book.renderTo(els.viewer, {
       width: "100%", height: "100%", flow: "paginated",
       spread: twoPages ? "always" : "none", minSpreadWidth: MIN_SPREAD_WIDTH,
+      // Without this the book's iframe gets sandbox="allow-same-origin" only. Chrome still delivers taps
+      // and clicks inside it to our listeners, but Safari/WebKit (every browser on iPhone/iPad) delivers
+      // no events at all, so tapping words did nothing there. The book's own scripts are neutralised
+      // by disarmScripts() below, so this doesn't let book content run code.
+      allowScriptedContent: true,
     });
     rendition.hooks.content.register(onContent);
     rendition.on("relocated", onRelocated);
@@ -886,17 +902,21 @@
     if (!markSaved) { win.CSS?.highlights?.delete("saved-word"); return; }
     if (!win.CSS?.highlights || !win.Highlight || savedWords.size === 0) return;
     const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`(?<![\\p{L}\\p{M}])(?:${[...savedWords].map(escRe).join("|")})(?![\\p{L}\\p{M}])`, "giu");
+    // Whole words only. Group 1 is the character before the word (or nothing at the start); written
+    // without a lookbehind "(?<!…)", which iPhones before iOS 16.4 don't support.
+    const re = new RegExp(`(^|[^\\p{L}\\p{M}])(${[...savedWords].map(escRe).join("|")})(?![\\p{L}\\p{M}])`, "giu");
     const doc = contents.document;
     const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
     const ranges = [];
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
       re.lastIndex = 0;
       for (let m; (m = re.exec(n.data));) {
+        const start = m.index + m[1].length;
         const r = doc.createRange();
-        r.setStart(n, m.index);
-        r.setEnd(n, m.index + m[0].length);
+        r.setStart(n, start);
+        r.setEnd(n, start + m[2].length);
         ranges.push(r);
+        if (m[2].length === 0) re.lastIndex++;  // safety: never loop on an empty match
       }
     }
     win.CSS.highlights.set("saved-word", new win.Highlight(...ranges));

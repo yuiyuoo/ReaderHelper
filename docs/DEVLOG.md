@@ -559,6 +559,23 @@ answer several times faster; the app needs no change for that.
   word is looked up exactly once. Earlier phone and desktop tests still pass.
   *File:* `frontend/reader.js`
 
+### 41. Still nothing on the iPhone: Safari delivers no events into the book
+- **Problem:** after #40, tapping a word still did nothing in Safari on the iPhone.
+- **Cause:** epub.js shows each chapter in an iframe with `sandbox="allow-same-origin"`, i.e. scripts disabled.
+  Chrome still delivers taps and clicks inside it to the reader's listeners (so every test passed), but
+  Safari/WebKit delivers **no events at all** into such a frame: no taps, no swipes, no selection. A known
+  epub.js issue on iPhone/iPad; WebKit itself couldn't be run on this Windows PC to reproduce it.
+- **Fix:** epub.js option `allowScriptedContent: true` (sandbox becomes `allow-same-origin allow-scripts`).
+  So that book files still can't run code, an epub.js hook rewrites each chapter before it is shown:
+  `<script>` elements become inert `<script type="text/plain">` (kept as elements, so saved positions don't
+  shift) and `on…=""` event attributes are renamed.
+- **Also:** the highlighting of saved words used a regex lookbehind `(?<!…)`, which iPhones before iOS 16.4
+  don't support; rewritten without it (whole words only, same result).
+- **Tested** (Chrome engine): sandbox attribute, script neutralising (element count unchanged, normal text
+  untouched), highlighting on a story chapter, tap/swipe/bottom-sheet tests, reading-position tests. **Not
+  verified on a real iPhone** – that needs the user's test.
+  *File:* `frontend/reader.js`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
