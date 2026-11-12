@@ -44,6 +44,7 @@
 
   function card(b) {
     const when = b.opened_at ? `Opened ${relTime(b.opened_at)}` : "Not opened yet";
+    const words = b.word_count ? ` · ${b.word_count} word${b.word_count === 1 ? "" : "s"}` : "";
     return `<article class="book-card">
       <a class="book-open" href="/read?book=${b.id}" aria-label="Read ${esc(b.title)}">
         <div class="cover${b.cover_url ? "" : " default"}" style="${b.cover_url ? "" : `background:${colorFor(b.title)}`}">${coverInner(b.title, b.cover_url)}</div>
@@ -53,7 +54,7 @@
         ${b.author ? `<div class="book-author">${esc(b.author)}</div>` : ""}
         <div class="book-row">
           ${b.language ? `<span class="lang-tag">${esc(b.language)}</span>` : ""}
-          <span class="when">${esc(when)}</span>
+          <span class="when" title="${esc(when + words)}">${esc(when + words)}</span>
           <button class="icon-btn" type="button" data-edit="${b.id}" aria-label="Edit ${esc(b.title)}" title="Edit name and picture">${PENCIL}</button>
         </div>
       </div>
@@ -86,6 +87,11 @@
       const n = (await (await fetch("/api/vocab")).json()).length;
       $("vocabCount").textContent = n;
       $("vocabCount").hidden = n === 0;
+    } catch { /* the badge is optional */ }
+    try {
+      const c = await (await fetch("/api/review/counts")).json();
+      $("dueCount").textContent = c.due + c.new;
+      $("dueCount").hidden = c.due + c.new === 0;
     } catch { /* the badge is optional */ }
   }
 

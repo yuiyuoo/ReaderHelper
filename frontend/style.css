@@ -181,6 +181,54 @@ button.primary { background: var(--accent); color: var(--on-accent); border-colo
 .lib-status { min-height: 22px; margin: -16px 0 16px; color: var(--muted); }
 .lib-status.error { color: var(--danger); }
 
+/* ---------- review (flashcards) ---------- */
+.review { width: 100%; max-width: 680px; margin: 0 auto; padding: 28px 20px 48px; flex: 1; }
+.review-top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.review-top h1 { font-family: var(--font-book); font-weight: 600; font-size: 30px; margin: 0; }
+.review-counts { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.progress-track.review-progress { display: block; width: 100%; height: 4px; margin: 12px 0 24px; }
+.flashcard { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow);
+  padding: 28px 32px 22px; display: flex; flex-direction: column; gap: 10px; }
+.fc-meta { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.fc-book { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-word-row { display: flex; align-items: center; gap: 8px; }
+.fc-word { font-family: var(--font-book); font-size: 38px; font-weight: 600; line-height: 1.15; overflow-wrap: anywhere; }
+.fc-lemma { margin: -4px 0 0; color: var(--muted); font-size: 14px; }
+.fc-lemma:empty { display: none; }
+.fc-sentence { margin: 6px 0 0; font-family: var(--font-book); font-size: 18px; line-height: 1.6; }
+.fc-sentence mark { background: var(--highlight); color: inherit; border-radius: 3px; padding: 0 2px;
+  text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+.fc-hint { margin: 0; color: var(--muted); font-size: 14px; }
+.fc-answer { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.fc-translation { font-size: 24px; font-weight: 700; color: var(--accent); }
+.fc-sense:empty, .fc-gloss:empty, .fc-sentence-tr:empty { display: none; }
+.fc-gloss { margin: 0; }
+.fc-sentence-tr { margin: 0; color: var(--muted); font-style: italic; }
+.fc-actions { margin-top: 12px; }
+.fc-show { width: 100%; min-height: 48px; font-size: 16px; border-radius: 10px; }
+.fc-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.fc-grades button { min-height: 56px; border-radius: 10px; font-weight: 600; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px; }
+.fc-grades small { font-weight: 400; font-size: 12px; color: var(--muted); }
+.fc-grades .g-again { color: var(--danger); }
+.fc-grades .g-good { border-color: var(--accent); }
+kbd { font: 11px/1.4 var(--font); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px;
+  padding: 0 4px; color: var(--muted); background: var(--bg); }
+.fc-show kbd { background: transparent; color: var(--on-accent); border-color: color-mix(in srgb, var(--on-accent) 50%, transparent); }
+.fc-keys { margin: 6px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+.review-done { text-align: center; padding: 48px 16px; }
+.review-done h2 { font-family: var(--font-book); font-weight: 600; font-size: 26px; margin: 0 0 8px; }
+.review-done p { color: var(--muted); margin: 0 0 20px; }
+.review-done-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.review-done-actions .btn { min-height: 44px; display: inline-flex; align-items: center; border-radius: 10px; padding: 0 18px; }
+@media (max-width: 520px) {
+  .toolbar label[for="bookFilter"] { display: none; }  /* the select's first option says "All books" */
+  .flashcard { padding: 20px 18px 16px; }
+  .fc-word { font-size: 32px; }
+  .fc-grades { grid-template-columns: repeat(2, 1fr); }
+  .fc-keys { display: none; }
+}
+
 /* Book dialog (add / edit) */
 dialog.book-dialog { border: 0; border-radius: 16px; padding: 0; width: min(560px, calc(100vw - 32px));
   box-shadow: 0 24px 64px rgba(0,0,0,.3); color: var(--text); background: var(--panel); }
@@ -265,7 +313,7 @@ body.two-pages .page-card::before { content: ""; position: absolute; top: 0; bot
   background: linear-gradient(90deg, transparent, rgba(60,50,30,.07) 45%, rgba(60,50,30,.12) 50%, rgba(60,50,30,.07) 55%, transparent); }
 :root[data-theme="dark"] body.two-pages .page-card::before {
   background: linear-gradient(90deg, transparent, rgba(0,0,0,.25) 45%, rgba(0,0,0,.4) 50%, rgba(0,0,0,.25) 55%, transparent); }
-.spread-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.spread-btn[aria-pressed="true"], .mark-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .page-nav { align-self: center; width: 44px; height: 72px; padding: 0; display: inline-flex; align-items: center;
   justify-content: center; border: 0; border-radius: 10px; background: transparent; color: var(--muted); }
 .page-nav:hover:not(:disabled) { background: var(--hover); color: var(--text); }
@@ -275,7 +323,7 @@ body.two-pages .page-card::before { content: ""; position: absolute; top: 0; bot
 
 @media (max-width: 760px) {
   .read-bar { padding: 4px 8px; gap: 4px; }
-  .seg-label, .progress-track, .spread-btn { display: none; }
+  .seg-label, .read-bar .progress-track, .spread-btn { display: none; }
   body.two-pages .page-card::before { display: none; }  /* phones always show one page */
   body.two-pages .page-card { padding: 20px 18px 12px; }
   .read-stage { padding: 8px 0 0; gap: 0; }
@@ -283,3 +331,5 @@ body.two-pages .page-card::before { content: ""; position: absolute; top: 0; bot
   .page-nav { width: 30px; }
 }
 .toolbar .theme-toggle { border-radius: 10px; color: var(--text); }
+.book-link { font-size: 12px; color: var(--accent); text-decoration: none; }
+.book-link:hover { text-decoration: underline; }

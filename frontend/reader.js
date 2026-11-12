@@ -6,7 +6,7 @@
   const els = {
     bookTitle: $("bookTitle"), tocBtn: $("tocBtn"), tocMenu: $("tocMenu"), tocList: $("tocList"),
     chapter: $("chapterLabel"), pct: $("progressPct"), fill: $("progressFill"),
-    fontDown: $("fontDown"), fontUp: $("fontUp"), targetGroup: $("targetGroup"), spreadBtn: $("spreadBtn"),
+    fontDown: $("fontDown"), fontUp: $("fontUp"), targetGroup: $("targetGroup"), spreadBtn: $("spreadBtn"), markBtn: $("markBtn"),
     viewer: $("viewer"), prev: $("prev"), next: $("next"), vocabCount: $("vocabCount"),
     status: $("status"), popover: $("popover"), autoplay: $("autoplay"), selBtn: $("selBtn"),
   };
@@ -36,6 +36,10 @@
   let twoPages = store.get("spread") === "2";  // two pages side by side, like an open book
   const MIN_SPREAD_WIDTH = 760;  // below this width epub.js falls back to one page by itself
   let tocItems = [];            // flattened TOC: {label, href, depth, spineIndex}
+  let currentBookId = null;     // library id of the open book (saved words remember it)
+  let markSaved = store.get("markSaved") !== "0";  // highlight saved words in the text
+  // "Open in book" from the vocabulary/review pages: /read?book=<id>&cfi=<position of the word>
+  const jumpCfi = new URLSearchParams(location.search).get("cfi");
   // Last position reported by epub.js. Its currentLocation() can return a stale page
   // (e.g. after the web font changed the line breaks), so this is used instead.
   let lastLocation = null;
@@ -58,6 +62,7 @@
       }
       const info = await r.json();
       els.bookTitle.textContent = info.title;
+      currentBookId = info.id;
       document.title = `${info.title} · ReaderHelper`;
       fetch(`/api/books/${info.id}/opened`, { method: "POST" }).catch(() => {});
       openBook(info);
@@ -80,7 +85,12 @@
     try {
       await book.ready;
       bookLang = (book.packaging.metadata.language || "").slice(0, 2).toLowerCase();
-      await displayAt(store.get(`pos:${bookName}`));
+      await displayAt(jumpCfi || store.get(`pos:${bookName}`));
+      if (jumpCfi) {
+        flashWord(jumpCfi);
+        // A later reload should continue where you read, not jump to the word again.
+        history.replaceState(null, "", `/read?book=${encodeURIComponent(currentBookId)}`);
+      }
       els.prev.disabled = els.next.disabled = false;
       await buildToc();
       updateChapter(lastLocation);
@@ -299,6 +309,14 @@
     await displayAt(cfi);
   });
 
+  function renderMark() { els.markBtn.setAttribute("aria-pressed", String(markSaved)); }
+  els.markBtn.addEventListener("click", () => {
+    markSaved = !markSaved;
+    store.set("markSaved", markSaved ? "1" : "0");
+    renderMark();
+    rendition?.getContents().forEach(highlightSaved);
+  });
+
   function renderAutoplay() { els.autoplay.setAttribute("aria-pressed", String(autoplay)); }
   els.autoplay.addEventListener("click", () => {
     autoplay = !autoplay;
@@ -331,6 +349,7 @@
     h1, h2, h3, h4 { line-height: 1.25 !important; font-weight: 600 !important; letter-spacing: -0.01em; }
     a { color: var(--rh-link) !important; }
     ::selection { background: var(--rh-sel); }
+    ::highlight(jump-word) { background-color: #f6d36b; color: #22251f; }
     ::highlight(saved-word) { background-color: var(--rh-hl); text-decoration: underline;
                               text-decoration-color: var(--rh-ul); text-underline-offset: 3px; }
     /* Dark: books often hard-code black text or white boxes, so neutralise them. */
@@ -469,7 +488,24 @@
     lookup(hit.word, sentence, {
       left: frame.left + wr.left, right: frame.left + wr.right,
       top: frame.top + wr.top, bottom: frame.top + wr.bottom,
-    });
+    }, false, cfiOf(doc, hit.range));
+  }
+
+  /** EPUB position (CFI) of a range in one of the book's iframes, so a saved word can be found again. */
+  function cfiOf(doc, range) {
+    try {
+      return rendition.getContents().find((c) => c.document === doc)?.cfiFromRange(range) || "";
+    } catch { return ""; }
+  }
+
+  /** Briefly highlight the word we jumped to ("Open in book"). */
+  function flashWord(cfi) {
+    let range;
+    try { range = rendition.getRange(cfi); } catch { return; }
+    const win = range?.startContainer?.ownerDocument?.defaultView;
+    if (!range || !win?.CSS?.highlights || !win.Highlight) return;
+    win.CSS.highlights.set("jump-word", new win.Highlight(range));
+    setTimeout(() => win.CSS.highlights.delete("jump-word"), 4000);
   }
 
   // ---------- selection → Translate button ----------
@@ -493,7 +529,7 @@
     const first = frameRect(doc, rects[0]), last = frameRect(doc, rects[rects.length - 1]);
     // Popover anchor: the whole selection's box (so the popover goes below or above it).
     const anchor = { left: first.left, right: last.right, top: first.top, bottom: last.bottom };
-    pendingSel = { text, range, anchor };
+    pendingSel = { text, range, anchor, cfi: cfiOf(doc, range) };
 
     const b = els.selBtn;
     b.hidden = false;
@@ -515,7 +551,7 @@
 
   /** Short selections (≤ 4 words) are looked up like a word, with their sentence as context;
    *  longer ones are translated as a passage. */
-  function translateSelection({ text, range, anchor }) {
+  function translateSelection({ text, range, anchor, cfi }) {
     const phrase = text.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
     const words = phrase.split(" ").filter(Boolean);
     if (words.length && words.length <= MAX_PHRASE_WORDS && !/[.!?;:]\s/.test(phrase)) {
@@ -523,7 +559,7 @@
       const context = node.nodeType === Node.TEXT_NODE
         ? sentenceAt({ node, offset: range.startOffset, word: phrase })
         : phrase;
-      lookup(phrase, context.includes(phrase) ? context : phrase, anchor);
+      lookup(phrase, context.includes(phrase) ? context : phrase, anchor, false, cfi);
     } else {
       translatePassage(text, anchor);
     }
@@ -606,12 +642,12 @@
 
   // ---------- lookup + popover ----------
 
-  async function lookup(word, sentence, anchor, refresh = false) {
+  async function lookup(word, sentence, anchor, refresh = false, cfi = "") {
     if (inflight) inflight.abort();
     const ctrl = (inflight = new AbortController());
     const seq = ++lookupSeq;
     const hintLang = ["en", "de"].includes(bookLang) ? bookLang : null;
-    const state = { word, sentence, anchor, lang: hintLang, data: null };
+    const state = { word, sentence, anchor, cfi, lang: hintLang, data: null };
 
     renderPopover(state, "loading");
     positionPopover(anchor);
@@ -716,7 +752,7 @@
       if (act === "close") closePopover();
       if (act === "speak") speak(state.word, state.lang || "en");
       if (act === "save") saveWord(state, ev.target);
-      if (act === "retry") lookup(state.word, state.sentence, state.anchor, true);
+      if (act === "retry") lookup(state.word, state.sentence, state.anchor, true, state.cfi);
     };
   }
 
@@ -764,6 +800,7 @@
         body: JSON.stringify({
           lang: d.lang, word: d.word, lemma: d.lemma, sentence: d.sentence,
           translation_vi: d.translation_vi, gloss_vi: d.gloss_vi, target_lang: d.target_lang || "vi",
+          sentence_tr: d.sentence_tr || "", book_id: currentBookId, cfi: state.cfi || "",
         }),
       });
       if (!r.ok) throw new Error();
@@ -789,6 +826,7 @@
   /** Highlight saved words with the CSS Custom Highlight API (no DOM changes, so CFIs stay valid). */
   function highlightSaved(contents) {
     const win = contents.window;
+    if (!markSaved) { win.CSS?.highlights?.delete("saved-word"); return; }
     if (!win.CSS?.highlights || !win.Highlight || savedWords.size === 0) return;
     const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`(?<![\\p{L}\\p{M}])(?:${[...savedWords].map(escRe).join("|")})(?![\\p{L}\\p{M}])`, "giu");
@@ -810,6 +848,7 @@
   // ---------- init ----------
   renderTarget();
   renderSpread();
+  renderMark();
   renderAutoplay();
   setFont(fontPct);
   loadSavedWords().then(loadBookFromUrl);
