@@ -209,7 +209,8 @@
     spreadAnchor = null;
     rendition?.display(tocItems[b.dataset.i].href);
   });
-  document.addEventListener("mousedown", (e) => {
+  // pointerdown, not mousedown: iPhone Safari sends no mouse events for taps on plain areas.
+  document.addEventListener("pointerdown", (e) => {
     if (!els.tocMenu.hidden && !e.target.closest(".toc-wrap")) setTocOpen(false);
   });
 
@@ -424,6 +425,13 @@
       start = null;
       const sel = doc.getSelection();
       if (sel && !sel.isCollapsed) return;  // the user was selecting text
+      // A tap (finger barely moved, short touch). Handled here because iPhone Safari sends no click
+      // event for a tap on plain text, so the click listener alone would never see it.
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && dt < 600) {
+        lastTouchTap = Date.now();
+        tapAt(doc, t.clientX, t.clientY, doc.elementFromPoint(t.clientX, t.clientY));
+        return;
+      }
       if (Math.abs(dx) < 50 || Math.abs(dx) < 1.5 * Math.abs(dy) || dt > 800) return;
       closePopover();
       hideSelBtn();
@@ -508,12 +516,22 @@
     return (found ? found.text : text).replace(/\s+/g, " ").trim();
   }
 
+  // Time of the last tap handled from touch events (see addSwipe). Some browsers send a click afterwards
+  // as well; that click must not look the word up a second time.
+  let lastTouchTap = 0;
+
   function onDocClick(e, doc) {
     if (e.button !== 0) return;
-    if (e.target.closest?.("a[href]")) return;             // let links work
+    if (Date.now() - lastTouchTap < 800) return;           // already handled as a tap
+    tapAt(doc, e.clientX, e.clientY, e.target);
+  }
+
+  /** Look up the word at (x, y) in the book, or close the popup when there is no word. */
+  function tapAt(doc, x, y, target) {
+    if (target?.closest?.("a[href]")) return;              // let links work
     const sel = doc.getSelection();
     if (sel && !sel.isCollapsed) return;                   // user is selecting text
-    const hit = wordAtPoint(doc, e.clientX, e.clientY);
+    const hit = wordAtPoint(doc, x, y);
     if (!hit) return closePopover();
     const sentence = sentenceAt(hit);
     const frame = doc.defaultView.frameElement.getBoundingClientRect();
@@ -811,7 +829,7 @@
     els.popover.hidden = true;
   }
 
-  document.addEventListener("mousedown", (e) => {
+  document.addEventListener("pointerdown", (e) => {  // pointerdown: see the chapter menu above
     if (!els.popover.hidden && !els.popover.contains(e.target)) closePopover();
   });
 

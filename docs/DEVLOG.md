@@ -545,6 +545,20 @@ answer several times faster; the app needs no change for that.
   *Files:* `frontend/manifest.json`, `frontend/icons/` (new), all four HTML pages, `frontend/reader.js`,
   `frontend/style.css`, `start.bat` (new)
 
+### 40. Tapping a word did nothing on a real iPhone
+- **Problem:** on the phone, tapping a word showed nothing. In the PC browser's phone mode it worked.
+- **Cause:** on an iPhone every browser uses Apple's engine (WebKit), and it sends **no `click` event** for a
+  tap on plain text (only on links, buttons and other "clickable" elements). The reader looked words up on
+  `click`, so the tap never arrived. The PC's phone mode is still Chrome's engine, which does send the click,
+  so the problem didn't show there. The same quirk affected "tap outside closes the popup" (`mousedown`).
+- **Fix:** the reader recognises a tap itself from the touch events (finger moved < 10 px, touch < 0.6 s) and
+  looks the word up directly. A click that some browsers (Android) still send afterwards is ignored for
+  0.8 s, so a word is never looked up twice. "Tap outside" now uses `pointerdown`, which fires on every device.
+- **Tested** by imitating the iPhone in the phone emulation: all click events inside the book are blocked
+  before they reach the app → tapping a word still opens the popup. Without blocking (Android-like) the
+  word is looked up exactly once. Earlier phone and desktop tests still pass.
+  *File:* `frontend/reader.js`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
