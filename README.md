@@ -92,7 +92,15 @@ Open http://localhost:8000.
   a word wrong. **Export CSV (Anki)** downloads a file where
   front = word + sentence and back = translation + explanation. In Anki, choose *File → Import*.
   The file's header lines tell Anki that it's comma-separated and contains HTML.
-- Saved words are highlighted in the text (Chrome/Edge 105+, Firefox 140+, Safari 17.2+).
+  - Each word remembers the **book and exact place** it was saved from: the book link under the word
+    opens the book there and briefly marks the word in yellow. Filter the list by book with *Words from*.
+- **Review** (button on the library and vocabulary pages, with the number of words waiting): flashcards.
+  You see the word in its sentence, try to remember the meaning, press **Show answer** (Space), then rate
+  yourself: **Again** (comes back in 10 min, in this session) · **Hard** · **Good** · **Easy** (keys 1–4).
+  The buttons show when the word will come back; words you know come back less and less often
+  (1 day → 3 days → about a week → …), forgotten ones start over. Filter by book with *Words from*.
+- Saved words are highlighted in the text (Chrome/Edge 105+, Firefox 140+, Safari 17.2+). The marker
+  button in the reader's top bar turns that on or off.
 
 ## How a lookup works
 

@@ -459,6 +459,49 @@ existed since the beginning; the earlier tests only checked the section, not the
 On this machine everything runs on the CPU. A graphics card supported by Ollama would make the model
 answer several times faster; the app needs no change for that.
 
+---
+
+## Part 11: Learning – review mode and words per book
+
+### 36. Saved words were only an archive
+- **Goal:** help to actually remember the words, and connect each word with the place it came from.
+- **Review mode** (`/review`, new `backend/srs.py`): flashcards with spaced repetition, a simplified SM-2
+  (the idea behind Anki).
+  - The front shows the word in its sentence (word marked), language, book, 🔊. **Show answer** (Space)
+    reveals the translation, the explanation and the sentence translation.
+  - Four answers (keys 1–4). Each button shows when the word will come back:
+
+    | Answer | Next time | Effect |
+    | --- | --- | --- |
+    | Again | 10 min (again in this session) | starts over, word becomes "harder" |
+    | Hard | ~1.2 × last interval (min. 1 day) | slightly harder |
+    | Good | 1 day → 3 days → interval × ease (≈ 2.5) | |
+    | Easy | 4 days, then grows faster | slightly easier |
+
+  - Order: words that are due first (most overdue first), then new words (oldest saved first). The
+    session can be limited to one book.
+- **Words per book:** saving a word now also stores the book, the exact position (EPUB CFI of the word or
+  selected phrase) and the translation of the whole sentence. The vocabulary page shows the book under
+  each word with a link; **Open in book** opens the reader at that position and marks the word in yellow
+  for 4 s. Afterwards the position is removed from the address, so a reload continues where you read.
+  Both pages can be filtered by book; the library shows "N words" per book and a Review button with the
+  number of words waiting.
+- **Highlight on/off:** a marker button in the reader's top bar (remembered).
+- **Database:** new `vocab` columns (`sentence_tr`, `book_id`, `cfi`, `due_at`, `interval_days`, `ease`,
+  `reps`, `lapses`, `reviewed_at`), added automatically to existing databases. Removing a book keeps its
+  words (the link is cleared).
+- **Existing words:** the 4 words saved before this change were linked to their book once, by finding their
+  sentence in each book's text. Their exact position is unknown, so their link opens the book at the
+  current reading position ("Open the book →").
+- **Tested in the browser on a copy of the data** (so the real review schedule wasn't touched): saving
+  stores book + position + sentence translation; highlight toggle; book filter; "Open in book" lands on the
+  word and marks it; a full review session (Again → card returns at the end → 6 answers for 5 cards →
+  "next word due tomorrow"); library and vocabulary badges; phone width.
+
+  *Files:* `backend/srs.py` (new), `backend/db.py`, `backend/main.py`, `frontend/review.html` + `review.js`
+  (new), `frontend/reader.js`, `frontend/index.html`, `frontend/vocab.html`, `frontend/library.html`,
+  `frontend/library.js`, `frontend/style.css`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
@@ -473,11 +516,12 @@ answer several times faster; the app needs no change for that.
 | Meanings always in Vietnamese | Selectable: Vietnamese (default), English, German; `*_vi` fields hold the chosen language, `target_lang` says which | Feature request (#24) |
 | Model returns translation, gloss, sense | + `sentence` (translation of the whole sentence, written first) | Better word meanings with qwen3:8b (#33, #34) |
 | One `/lookup` call | Optional `quick` step first (dictionary only), then the model | Something useful on screen after ~2 s (#35) |
+| Vocabulary: save, list, delete, CSV | + edit, book + position, review scheduling (`/review`, `/api/review`) | Learning features (#23, #36) |
 
 ---
 
 ## Still open (ideas)
-- **Review mode** (flashcards with spaced repetition) and words per book with a link back to the passage.
+- Edit a word directly from the review card; show review statistics (words learned per week).
 - Popover and Translate button in the new design; bottom sheet on phones.
 - Book footnote numbers in chapter names ("Die drei Schläfer.(2)").
 - German adjective forms the lemmatizers miss (*ungeheueren* → should be *ungeheuer*).
