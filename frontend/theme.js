@@ -38,3 +38,15 @@
   listeners.push(label);
   document.addEventListener("DOMContentLoaded", label);
 })();
+
+/** Grammar line ("der Schlüssel, die Schlüssel" / "fängt an · fing an · hat angefangen") as HTML, with the
+    article coloured by gender: der blue, die red, das green, plural-only grey. Used by reader, cards, list. */
+window.grammarHtml = (text, gender) => {
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  if (!text) return "";
+  const m = /^(der|die|das) /.exec(text);
+  if (!m) return esc(text);
+  const g = gender || (text.includes("(nur Plural)") ? "pl" : { der: "m", die: "f", das: "n" }[m[1]]);
+  return `<span class="art g-${g}">${m[1]}</span> ${esc(text.slice(m[0].length))}`;
+};

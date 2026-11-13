@@ -804,6 +804,11 @@
       <button class="icon" data-act="speak" title="Pronounce">🔊</button>
       <button class="close" data-act="close" title="Close (Esc)">×</button>
     </div>`;
+    const g = d?.grammar;
+    if (g) {
+      html += `<div class="grammar"${g.guess ? ' title="Gender read from the sentence; no dictionary table for this word"' : ""}>
+        ${grammarHtml(g.text, g.gender)}${g.irregular ? ' <span class="tag">unregelmäßig</span>' : ""}</div>`;
+    }
     if (ex) {
       const how = { list: "Fixed expression", dictionary: "Expression (from the dictionary)",
                     manual: "Your own combination" }[ex.source] || "Expression";
@@ -935,6 +940,7 @@
           lang: d.lang, word: d.expression ? d.expression.words : d.word, lemma: d.lemma, sentence: d.sentence,
           ...meaningToSave(d),
           sentence_tr: d.sentence_tr || "", book_id: currentBookId, cfi: state.cfi || "",
+          grammar: d.grammar?.text || "",
         }),
       });
       if (!r.ok) throw new Error();

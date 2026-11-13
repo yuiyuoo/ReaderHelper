@@ -76,6 +76,7 @@
     $("cBook").textContent = c.book_title ? `from ${c.book_title}` : "";
     $("cWord").textContent = c.word;
     $("cLemma").textContent = c.lemma && c.lemma.toLowerCase() !== c.word.toLowerCase() ? `base form: ${c.lemma}` : "";
+    $("cGrammar").innerHTML = grammarHtml(c.grammar);
     $("cSentence").innerHTML = markedSentence(c.sentence, c.word);
     $("cTranslation").textContent = c.translation_vi || "—";
     $("cSense").textContent = "";

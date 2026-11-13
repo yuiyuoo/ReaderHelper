@@ -19,11 +19,13 @@
   --danger-border: #f1c4bf;
   --shadow: 0 1px 2px rgba(60,50,30,.06), 0 8px 28px rgba(60,50,30,.08);
   --highlight: #dbeadb;     /* saved words in the book */
+  --g-m: #2563c9; --g-f: #c0392b; --g-n: #23864f; --g-pl: #7b6f8f;  /* der / die / das / plural */
   --font: "Noto Sans", "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
   --font-book: "Literata", Georgia, serif;
 }
 :root[data-theme="dark"] {
   --bg: #141512;
+  --g-m: #7fb0ff; --g-f: #ff8f80; --g-n: #6fd39a; --g-pl: #b9add0;
   --panel: #1d1f1b;
   --text: #e7e3d9;
   --muted: #a5a99d;
@@ -414,3 +416,13 @@ body.two-pages .page-card::before { content: ""; position: absolute; top: 0; bot
 .profile-add .field, .profile-rename .field { flex: 1; }
 .profile-add button, .profile-rename button { min-height: 40px; border-radius: 10px; padding: 0 16px; }
 @media (max-width: 600px) { .profile-chip .pname { display: none; } .profile-chip { padding-right: 3px; } }
+
+/* ---------- grammar (article, plural, verb forms) ---------- */
+.popover .grammar { margin: -2px 0 8px; font-size: 14px; color: var(--text); }
+.popover .grammar .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px;
+  padding: 0 5px; margin-left: 4px; white-space: nowrap; }
+.popover .grammar[title] { opacity: .85; }
+.art { font-weight: 700; }
+.art.g-m { color: var(--g-m); } .art.g-f { color: var(--g-f); } .art.g-n { color: var(--g-n); } .art.g-pl { color: var(--g-pl); }
+.fc-grammar { margin-top: 6px; font-size: 15px; }
+.fc-grammar:empty { display: none; }

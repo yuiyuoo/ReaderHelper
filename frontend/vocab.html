@@ -55,7 +55,8 @@
              title="${v.cfi ? "Open the book at this word" : "Open the book (position unknown for this word)"}">${esc(v.book_title || "Book")} →</a>`
         : "";
       return `<strong>${esc(v.word)}</strong> <span class="lang-tag">${esc(v.lang)}</span>` +
-        (v.lemma && v.lemma.toLowerCase() !== v.word.toLowerCase() ? `<br><small>${esc(v.lemma)}</small>` : "") + open;
+        (v.lemma && v.lemma.toLowerCase() !== v.word.toLowerCase() ? `<br><small>${esc(v.lemma)}</small>` : "") +
+        (v.grammar ? `<br><small class="grammar">${grammarHtml(v.grammar)}</small>` : "") + open;
     }
 
     function viewRow(v) {
