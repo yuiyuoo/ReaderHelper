@@ -426,3 +426,26 @@ body.two-pages .page-card::before { content: ""; position: absolute; top: 0; bot
 .art.g-m { color: var(--g-m); } .art.g-f { color: var(--g-f); } .art.g-n { color: var(--g-n); } .art.g-pl { color: var(--g-pl); }
 .fc-grammar { margin-top: 6px; font-size: 15px; }
 .fc-grammar:empty { display: none; }
+
+/* ---------- review: fill in the gap ---------- */
+.review-top .spacer { flex: 1; }
+.mode-seg { background: var(--hover); align-self: center; }
+.mode-seg button { color: var(--muted); }
+.mode-seg button[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+.fc-sentence input.gap { font: inherit; padding: 0 4px; margin: 0 1px; border: 0; border-bottom: 2px solid var(--accent);
+  border-radius: 4px 4px 0 0; background: var(--accent-soft); color: var(--text); min-width: 3ch; max-width: 100%; }
+.fc-sentence input.gap:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.gap-res { border-radius: 4px; padding: 0 3px; font-weight: 600; }
+.gap-res.right { background: color-mix(in srgb, var(--g-n) 22%, transparent); }
+.gap-res.almost { background: var(--warn-bg); color: var(--warn); }
+.gap-res.wrong { background: color-mix(in srgb, var(--danger) 16%, transparent); }
+.gap-res s { font-weight: 400; opacity: .75; margin-right: 4px; }
+.fc-prompt { margin: 0; font-size: 18px; }
+.fc-prompt .label { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.fc-prompt b { color: var(--accent); }
+.fc-feedback { margin: 0; font-weight: 600; }
+.fc-feedback.right { color: var(--g-n); } .fc-feedback.almost { color: var(--warn); } .fc-feedback.wrong { color: var(--danger); }
+.fc-cloze-actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+.fc-cloze-actions button { min-height: 48px; border-radius: 10px; font-size: 16px; }
+.fc-cloze-actions kbd { background: transparent; color: var(--on-accent); border-color: color-mix(in srgb, var(--on-accent) 50%, transparent); }
+.fc-grades button.suggested { outline: 3px solid var(--accent); outline-offset: 1px; }

@@ -14,6 +14,11 @@
   let counts = null;
   const bookFilter = $("bookFilter");
 
+  // "card": see the word, remember the meaning. "cloze": see the meaning, type the missing word.
+  const MODE_KEY = "reviewMode";
+  let mode = (() => { try { return localStorage.getItem(MODE_KEY); } catch { return null; } })() === "cloze" ? "cloze" : "card";
+  let cloze = null;  // current card in cloze mode: {gaps: [{start, end, answer}], hints, checked}
+
   // ---------- loading ----------
 
   async function loadBooks() {
@@ -66,10 +71,13 @@
 
   function next() {
     current = queue.shift() || null;
-    revealed = false;
     renderCounts();
     if (!current) return showDone();
-    const c = current;
+    show(current);
+  }
+
+  function show(c) {
+    revealed = false;
     $("done").hidden = true;
     $("card").hidden = false;
     $("cLang").textContent = c.lang;
@@ -93,9 +101,22 @@
     }
     $("answer").hidden = true;
     $("grades").hidden = true;
-    $("showBtn").hidden = false;
+    $("grades").querySelectorAll("button").forEach((b) => b.classList.remove("suggested"));
     $("fcHint").hidden = false;
-    $("showBtn").focus();
+    $("cFeedback").hidden = true;
+    cloze = mode === "cloze" ? startCloze(c) : null;
+    $("wordRow").hidden = $("cLemma").hidden = !!cloze;
+    $("cPrompt").hidden = $("clozeActions").hidden = $("keysCloze").hidden = !cloze;
+    $("showBtn").hidden = $("keysCard").hidden = !!cloze;
+    if (cloze) {
+      $("fcHint").textContent = "Which word fits the gap?";
+      $("cSentence").querySelector("input.gap").focus();
+    } else {
+      $("fcHint").textContent = mode === "cloze"
+        ? "This one is shown as a card (no meaning saved, or the word isn't in the sentence)."
+        : "Do you remember what it means here?";
+      $("showBtn").focus();
+    }
   }
 
   function reveal() {
@@ -105,7 +126,141 @@
     $("grades").hidden = false;
     $("showBtn").hidden = true;
     $("fcHint").hidden = true;
+    $("wordRow").hidden = $("cLemma").hidden = false;
     $("grades").querySelector(".g-good").focus();
+  }
+
+  // ---------- fill in the gap ----------
+
+  const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  /** Where the saved word stands in the sentence. Separated words ("fing … an", "stellte … in Frage")
+      become one gap per part, in order. null if a part can't be found. */
+  function findGaps(sentence, word) {
+    const parts = word.split(/\s*…\s*|\s+/).filter(Boolean);
+    const low = sentence.toLowerCase();
+    const gaps = [];
+    let from = 0;
+    for (const part of parts) {
+      // Whole words only ("an" must not match inside "kann"); a group instead of lookbehind for older iPhones.
+      const m = new RegExp(`(^|[^\\p{L}])(${escRe(part.toLowerCase())})(?![\\p{L}])`, "u").exec(low.slice(from));
+      if (!m) return null;
+      const start = from + m.index + m[1].length;
+      gaps.push({ start, end: start + part.length, answer: sentence.slice(start, start + part.length) });
+      from = start + part.length;
+    }
+    return gaps.length ? gaps : null;
+  }
+
+  /** The sentence with gaps (inputs) or, after checking, with the results. */
+  function clozeHtml(sentence, gaps, results) {
+    let html = "", at = 0;
+    gaps.forEach((g, i) => {
+      html += esc(sentence.slice(at, g.start));
+      if (!results) {
+        const w = Math.max(3, g.answer.length) + 1.5;
+        html += `<input class="gap" data-i="${i}" style="width:${w}ch" autocomplete="off" autocapitalize="off"
+          autocorrect="off" spellcheck="false" enterkeyhint="done" aria-label="Missing word${gaps.length > 1 ? ` ${i + 1}` : ""}">`;
+      } else {
+        const r = results[i];
+        const typed = r.verdict === "right" || !r.typed ? "" : `<s>${esc(r.typed)}</s>`;
+        html += `<span class="gap-res ${r.verdict}">${typed}${esc(g.answer)}</span>`;
+      }
+      at = g.end;
+    });
+    return html + esc(sentence.slice(at));
+  }
+
+  function startCloze(c) {
+    const meaning = c.translation_vi || c.gloss_vi;
+    const gaps = meaning ? findGaps(c.sentence, c.word) : null;
+    if (!gaps) return null;  // nothing to ask with, or nowhere to put the gap: show it as a normal card
+    $("cSentence").innerHTML = clozeHtml(c.sentence, gaps);
+    $("cPrompt").innerHTML = `<span class="label">Meaning</span><b>${esc(c.translation_vi || "")}</b>` +
+      (c.translation_vi && c.gloss_vi ? " – " : "") + esc(c.gloss_vi ? c.gloss_vi.slice(0, 160) : "");
+    $("hintBtn").disabled = false;
+    return { gaps, hints: 0, checked: false };
+  }
+
+  function hint() {
+    if (!cloze || cloze.checked) return;
+    cloze.hints += 1;
+    const inputs = [...$("cSentence").querySelectorAll("input.gap")];
+    const c = current;
+    if (cloze.hints === 1) {
+      inputs.forEach((el, i) => { el.placeholder = cloze.gaps[i].answer.slice(0, 1) + "…"; });
+    } else {
+      // Second hint: the base form (tells you which word; you still need the right form), else more letters.
+      if (c.lemma && c.lemma.toLowerCase() !== c.word.toLowerCase()) {
+        $("cLemma").textContent = `base form: ${c.lemma}`;
+        $("cLemma").hidden = false;
+      } else {
+        inputs.forEach((el, i) => {
+          const a = cloze.gaps[i].answer;
+          el.placeholder = a.slice(0, Math.ceil(a.length / 2)) + "…";
+        });
+      }
+      $("hintBtn").disabled = true;
+    }
+    (inputs.find((el) => !el.value) || inputs[0])?.focus();
+  }
+
+  function levenshtein(a, b) {
+    const d = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+      let prev = d[0];
+      d[0] = i;
+      for (let j = 1; j <= b.length; j++) {
+        const tmp = d[j];
+        d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+        prev = tmp;
+      }
+    }
+    return d[b.length];
+  }
+
+  /** right / almost (umlaut written as ae/oe/ue/ss, or one typo) / wrong. Capitals don't count. */
+  function judge(typed, answer) {
+    const norm = (s) => s.normalize("NFC").trim().toLowerCase().replace(/[.,;:!?"'«»„“”‚‘’()]/g, "");
+    const t = norm(typed), a = norm(answer);
+    if (!t) return "wrong";
+    if (t === a) return "right";
+    const plain = (s) => s.replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
+    if (plain(t) === plain(a) || (a.length >= 4 && levenshtein(t, a) <= 1)) return "almost";
+    return "wrong";
+  }
+
+  function check() {
+    if (!cloze || cloze.checked) return;
+    cloze.checked = true;
+    const inputs = [...$("cSentence").querySelectorAll("input.gap")];
+    const results = cloze.gaps.map((g, i) => {
+      const typed = inputs[i]?.value || "";
+      return { typed, verdict: judge(typed, g.answer) };
+    });
+    const verdicts = results.map((r) => r.verdict);
+    const overall = verdicts.includes("wrong") ? "wrong" : verdicts.includes("almost") ? "almost" : "right";
+    $("cSentence").innerHTML = clozeHtml(current.sentence, cloze.gaps, results);
+    const fb = $("cFeedback");
+    fb.className = `fc-feedback ${overall}`;
+    fb.textContent = { right: cloze.hints ? "Right – with a hint." : "Right!",
+                       almost: "Almost – check the spelling.", wrong: "Not quite." }[overall];
+    fb.hidden = false;
+    $("clozeActions").hidden = true;
+    reveal();
+    // Suggest a grade; Enter takes it, or pick another.
+    const g = overall === "wrong" ? "again" : overall === "almost" || cloze.hints ? "hard" : "good";
+    const btn = $("grades").querySelector(`[data-grade="${g}"]`);
+    btn.classList.add("suggested");
+    btn.focus();
+  }
+
+  function setMode(m) {
+    mode = m;
+    try { localStorage.setItem(MODE_KEY, m); } catch { /* ignore */ }
+    $("modeGroup").querySelectorAll("[data-mode]").forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.mode === m)));
+    if (current) show(current);  // same card again, in the new mode
   }
 
   async function grade(g) {
@@ -172,6 +327,15 @@
   // ---------- input ----------
 
   $("showBtn").addEventListener("click", reveal);
+  $("checkBtn").addEventListener("click", check);
+  $("hintBtn").addEventListener("click", hint);
+  $("modeGroup").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-mode]");
+    if (b && b.dataset.mode !== mode) setMode(b.dataset.mode);
+  });
+  $("cSentence").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.matches("input.gap")) { e.preventDefault(); check(); }
+  });
   $("grades").addEventListener("click", (e) => {
     const b = e.target.closest("[data-grade]");
     if (b) grade(b.dataset.grade);
@@ -180,6 +344,10 @@
 
   document.addEventListener("keydown", (e) => {
     if (["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (cloze && !cloze.checked) {
+      if (e.key === "Enter") { e.preventDefault(); check(); }
+      return;
+    }
     if ((e.key === " " || e.key === "Enter") && !revealed && current) { e.preventDefault(); reveal(); }
     const g = { 1: "again", 2: "hard", 3: "good", 4: "easy" }[e.key];
     if (g && revealed) { e.preventDefault(); grade(g); }
@@ -194,5 +362,6 @@
     speechSynthesis.speak(u);
   }
 
+  setMode(mode);
   loadBooks().then(loadQueue);
 })();

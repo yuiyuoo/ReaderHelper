@@ -38,12 +38,17 @@
     <div class="review-top">
       <h1>Review</h1>
       <span id="counts" class="review-counts"></span>
+      <span class="spacer"></span>
+      <div id="modeGroup" class="seg mode-seg" role="group" aria-label="How to review">
+        <button type="button" data-mode="card" title="See the word, remember the meaning">Cards</button>
+        <button type="button" data-mode="cloze" title="See the meaning, type the missing word">Fill in the gap</button>
+      </div>
     </div>
     <div class="progress-track review-progress" aria-hidden="true"><div id="progressFill" class="progress-fill"></div></div>
 
     <section id="card" class="flashcard" hidden aria-live="polite">
       <div class="fc-meta"><span id="cLang" class="lang-tag"></span><span id="cBook" class="fc-book"></span></div>
-      <div class="fc-word-row">
+      <div class="fc-word-row" id="wordRow">
         <span id="cWord" class="fc-word"></span>
         <button id="speakBtn" class="icon-btn" type="button" aria-label="Pronounce" title="Pronounce">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.5 8v4h3l4 3.5v-11L6.5 8h-3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13.5 7.5a3.5 3.5 0 010 5M15.5 5.5a6.5 6.5 0 010 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -51,6 +56,8 @@
       </div>
       <p id="cLemma" class="fc-lemma"></p>
       <p id="cSentence" class="fc-sentence"></p>
+      <p id="cPrompt" class="fc-prompt" hidden></p>
+      <p id="cFeedback" class="fc-feedback" role="status" hidden></p>
       <p class="fc-hint" id="fcHint">Do you remember what it means here?</p>
 
       <div id="answer" class="fc-answer" hidden>
@@ -64,6 +71,10 @@
 
       <div class="fc-actions">
         <button id="showBtn" class="primary fc-show" type="button">Show answer <kbd>Space</kbd></button>
+        <div id="clozeActions" class="fc-cloze-actions" hidden>
+          <button id="hintBtn" type="button" title="Show the first letter, then the base form">Hint</button>
+          <button id="checkBtn" class="primary" type="button">Check <kbd>Enter</kbd></button>
+        </div>
         <div id="grades" class="fc-grades" hidden>
           <button type="button" data-grade="again" class="g-again">Again<small></small></button>
           <button type="button" data-grade="hard" class="g-hard">Hard<small></small></button>
@@ -71,7 +82,8 @@
           <button type="button" data-grade="easy" class="g-easy">Easy<small></small></button>
         </div>
       </div>
-      <p class="fc-keys">Keys: <kbd>Space</kbd> show answer · <kbd>1</kbd>–<kbd>4</kbd> Again / Hard / Good / Easy</p>
+      <p class="fc-keys" id="keysCard">Keys: <kbd>Space</kbd> show answer · <kbd>1</kbd>–<kbd>4</kbd> Again / Hard / Good / Easy</p>
+      <p class="fc-keys" id="keysCloze" hidden>Keys: <kbd>Enter</kbd> check, then <kbd>Enter</kbd> takes the suggested answer · <kbd>1</kbd>–<kbd>4</kbd> Again / Hard / Good / Easy</p>
     </section>
 
     <section id="done" class="review-done" hidden>
