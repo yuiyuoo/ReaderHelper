@@ -77,6 +77,12 @@ On the phone: **swipe** left/right to turn pages, tap a word for the meaning (it
 bottom), long-press to select text and press **Dịch · Translate** at the bottom of the screen. The
 vocabulary list shows one card per word. The PC does all the work, so lookups are as fast as on the PC.
 
+**Focus mode (phones):** after the first page turn the top bar disappears and only the book is on screen,
+with a quiet line at the bottom (chapter · %). Tap the **margin** around the text (top, bottom, sides) or
+that bottom line to bring the bar back; the next page turn hides it again. Taps on the text still look up
+words. In Safari, Safari's own address bar stays (websites can't hide it on iPhone); from the home-screen
+icon only the iPhone's status line (time, battery) remains.
+
 ### Away from home (Tailscale)
 [Tailscale](https://tailscale.com) is a free private network between your own devices: the phone reaches
 the PC from anywhere, nobody else can. (Don't open a port on your router instead – the app has no login.)

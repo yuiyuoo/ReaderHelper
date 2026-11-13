@@ -797,6 +797,28 @@ self-assessment. You never have to produce the word yourself.
   server can't start on this PC while Smart App Control blocks spaCy.
   *Files:* `frontend/review.html`, `frontend/review.js`, `frontend/style.css`, `README.md`
 
+### 51. Focus mode on phones: only the book on screen
+**Problem:** On a phone the reader's top bar (two to three rows) took a large part of every page, though its
+buttons are mostly settings you change once.
+**Cause / constraint:** Reading apps toggle their menu by tapping the middle of the page, but here a tap on
+the text means "look up this word". And hiding the bar by taking it out of the layout would change the size
+of the book's view: epub.js only re-paginates on a window resize, and a re-flow also moves your position.
+**Fix:**
+- On phones (≤ 600 px) the bar is `position: fixed` and lies *over* the page; hiding it only slides it up
+  (`body.bars-hidden`, transform). The page size never changes, so nothing re-flows.
+- Turning a page (swipe, arrow keys) hides the bar; tapping the margin around the text (the reading area
+  outside the book's iframe, so never a word tap) or the new bottom line (chapter · %) brings it back. A tap
+  that only closes the word sheet doesn't also toggle the bar.
+- The page area takes the page colour edge to edge, the ‹ › buttons are hidden on phones (swipe), the bar sits
+  below the word sheet (z-index), and the profile button moved next to the chapter name, so the bar has two
+  rows instead of three.
+- Desktop and tablet are unchanged. Safari's own bars can't be hidden by a website on iPhone (no Fullscreen API
+  outside video); the home-screen icon already opens without them.
+- *Tested:* headless Edge at iPhone size (390×844) over the DevTools protocol: bar over the cover page →
+  after a page turn only text and "Informationen zum Buch 1 %" → margin tap brings the bar back. Not yet on a
+  real iPhone.
+  *Files:* `frontend/index.html`, `frontend/reader.js`, `frontend/style.css`, `frontend/profile.js`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
