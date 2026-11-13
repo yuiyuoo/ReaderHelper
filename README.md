@@ -183,6 +183,12 @@ can open the app at all.
   yourself: **Again** (comes back in 10 min, in this session) · **Hard** · **Good** · **Easy** (keys 1–4).
   The buttons show when the word will come back; words you know come back less and less often
   (1 day → 3 days → about a week → …), forgotten ones start over. Filter by book with *Words from*.
+  - **Fill in the gap** (switch at the top right, remembered): the sentence is shown with a gap and the
+    meaning you saved; type the word as it stands in the book (*fing*, not *fangen*) and press Enter.
+    Separated words get one gap per part (*fing … an*, *stellte … in Frage*). **Hint** shows the first
+    letter, a second time the base form. Typos and *ue* for *ü* count as "almost"; capitals don't matter.
+    The app then suggests a rating (right → Good, with hint or almost → Hard, wrong → Again); Enter takes
+    it. Words without a saved meaning are shown as normal cards.
 - Saved words are highlighted in the text (Chrome/Edge 105+, Firefox 140+, Safari 17.2+). The marker
   button in the reader's top bar turns that on or off.
 

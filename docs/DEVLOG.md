@@ -776,6 +776,27 @@ gefangen, with haben or sein?* The popover only showed meanings.
   *Files:* `backend/grammar.py`, `backend/nlp.py`, `backend/main.py`, `backend/db.py`, `frontend/reader.js`,
   `frontend/review.*`, `frontend/vocab.html`, `frontend/theme.js`, `frontend/style.css`
 
+### 50. Review that really tests: fill in the gap
+**Problem:** With flashcards you often recognise the *sentence*, not the word, and pressing "Good" is
+self-assessment. You never have to produce the word yourself.
+**Fix:** a second review mode on the Review page, **Fill in the gap** (`reviewMode` in localStorage):
+- The sentence with the saved word replaced by an input; the saved meaning (translation and note) is the clue.
+  The word, its base form, the speaker button (it would say the answer) and the grammar line stay hidden
+  until you check.
+- `findGaps()`: the saved word is split at "…" and spaces, and each part is searched in order as a whole word
+  (`(^|[^\p{L}])part(?![\p{L}])`, no lookbehind for older iPhones), so *fing … an* gives two gaps and *an*
+  doesn't match inside *kann*. A card without a meaning or whose word isn't found falls back to a normal card.
+- `judge()`: right (ignoring capitals and punctuation), **almost** (umlaut written ae/oe/ue/ss, or one
+  typo – Levenshtein ≤ 1 for words of 4+ letters), wrong. Two hints: first letter, then the base form (or half
+  the word when the base form is the word itself).
+- The answer shows each gap as right/almost/wrong (what you typed struck through), then the usual answer and
+  grade buttons with a suggested grade highlighted and focused: right → Good, almost or with hint → Hard,
+  wrong → Again. Enter takes it; 1–4 still choose freely. The schedule (srs.py) is unchanged.
+- *Tested:* gap finding and judging in Node (separable verb, three-part expression, "an" vs "kann", quotes,
+  word missing; right/almost/wrong cases); all 8 saved words get a gap. Not tested in a browser yet: the
+  server can't start on this PC while Smart App Control blocks spaCy.
+  *Files:* `frontend/review.html`, `frontend/review.js`, `frontend/style.css`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
@@ -795,7 +816,7 @@ gefangen, with haben or sein?* The popover only showed meanings.
 ---
 
 ## Still open (ideas)
-- Review: cloze mode (type the missing word), other sentences with the word, reverse direction.
+- Review: other sentences with the same word, reverse direction (meaning → word without the sentence).
 - "Known" words and a vocabulary/progress counter; % unknown words per chapter.
 - English irregular verb forms in the grammar line; fill grammar for words saved before #49.
 - Edit a word directly from the review card; show review statistics (words learned per week).
