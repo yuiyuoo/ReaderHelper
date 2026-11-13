@@ -172,7 +172,10 @@ button.primary { background: var(--accent); color: var(--on-accent); border-colo
 .cover.default svg { opacity: .9; }
 .cover.default .cover-title { font-family: var(--font-book); font-weight: 600; font-size: 17px; line-height: 1.25;
   display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.book-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* flex: 1 + margin-top: auto on the last row: language / "Opened …" / edit line on the same height in each row
+   of the grid, whether the title has one or two lines. */
+.book-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.book-meta .book-row { margin-top: auto; padding-top: 4px; }
 .book-title { font-family: var(--font-book); font-weight: 600; font-size: 16px; line-height: 1.3;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .book-author { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
