@@ -209,6 +209,7 @@
     const total = book?.spine?.length || 0;
     els.chapter.textContent = ch ? ch.label : loc?.start ? `Section ${loc.start.index + 1} of ${total}` : "";
     els.tocBtn.title = els.chapter.textContent;
+    $("footChapter").textContent = els.chapter.textContent;
     els.tocList.querySelectorAll(".toc-item").forEach((b) => {
       const on = ch && tocItems[b.dataset.i] === ch;
       b.classList.toggle("current", !!on);
@@ -259,6 +260,7 @@
     const pct = Math.round(p * 100);
     els.pct.textContent = `${pct}%`;
     els.fill.style.width = `${pct}%`;
+    $("footPct").textContent = `${pct}%`;
   }
 
   function onRelocated(loc) {
@@ -272,8 +274,23 @@
   // ---------- controls ----------
 
   // Turning pages yourself ends the "same text as before switching one/two pages" memory.
-  const goPrev = () => { spreadAnchor = null; rendition?.prev(); };
-  const goNext = () => { spreadAnchor = null; rendition?.next(); };
+  const goPrev = () => { spreadAnchor = null; setBars(false); rendition?.prev(); };
+  const goNext = () => { spreadAnchor = null; setBars(false); rendition?.next(); };
+
+  // ---------- focus mode (phones): only the book on screen ----------
+  // The top bar lies over the page instead of taking room, so showing/hiding it never changes the page
+  // size (that would re-flow the book). Turning a page hides it; tapping the margin around the text or the
+  // bottom line brings it back. Taps on the text itself stay word lookups.
+  function setBars(show) {
+    if (!PHONE.matches) show = true;
+    if (!show) setTocOpen(false);
+    document.body.classList.toggle("bars-hidden", !show);
+  }
+  const toggleBars = () => setBars(document.body.classList.contains("bars-hidden"));
+  document.querySelector(".read-stage").addEventListener("click", (e) => {
+    if (PHONE.matches && !e.target.closest(".page-nav") && Date.now() - closedPopoverAt > 700) toggleBars();
+  });
+  $("readFoot").addEventListener("click", toggleBars);
   els.prev.addEventListener("click", goPrev);
   els.next.addEventListener("click", goNext);
 
@@ -883,6 +900,7 @@
 
   // On phones the popover is a bottom sheet and the Translate button sits at the bottom (CSS).
   const PHONE = window.matchMedia("(max-width: 600px)");
+  PHONE.addEventListener("change", () => setBars(true));
 
   function positionPopover(a) {
     const p = els.popover, m = 8;
@@ -902,8 +920,9 @@
     els.popover.hidden = true;
   }
 
+  let closedPopoverAt = 0;  // a tap that only closes the popup shouldn't also toggle the bars (focus mode)
   document.addEventListener("pointerdown", (e) => {  // pointerdown: see the chapter menu above
-    if (!els.popover.hidden && !els.popover.contains(e.target)) closePopover();
+    if (!els.popover.hidden && !els.popover.contains(e.target)) { closePopover(); closedPopoverAt = Date.now(); }
   });
 
   function speak(text, lang) {

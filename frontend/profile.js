@@ -102,7 +102,8 @@
   // ---------- top-bar button ----------
 
   function addButton() {
-    const bar = document.querySelector(".read-bar .read-right") || document.querySelector(".toolbar");
+    // Reader: next to the chapter name (the right side is full on phones). Other pages: the toolbar.
+    const bar = document.querySelector(".read-bar .read-left") || document.querySelector(".toolbar");
     if (!bar || !current) return;
     const b = document.createElement("button");
     b.type = "button";

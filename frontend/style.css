@@ -452,3 +452,24 @@ body.two-pages .page-card::before { content: ""; position: absolute; top: 0; bot
 .fc-cloze-actions button { min-height: 48px; border-radius: 10px; font-size: 16px; }
 .fc-cloze-actions kbd { background: transparent; color: var(--on-accent); border-color: color-mix(in srgb, var(--on-accent) 50%, transparent); }
 .fc-grades button.suggested { outline: 3px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- focus mode on phones: only the book on screen (see setBars in reader.js) ---------- */
+.read-foot { display: none; }
+@media (max-width: 600px) {
+  body.reading .read-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 999;  /* below the word sheet */
+    box-shadow: 0 6px 20px rgba(0,0,0,.12); transition: transform .2s ease, visibility .2s; }
+  body.reading.bars-hidden .read-bar { transform: translateY(-105%); visibility: hidden; box-shadow: none; }
+  /* The page fills the screen: same colour as the page, room for the notch and the bottom line. */
+  body.reading .read-stage { background: var(--panel); cursor: pointer;
+    padding: max(8px, env(safe-area-inset-top)) 0 calc(24px + env(safe-area-inset-bottom)); }
+  body.reading .page-card { border: 0; box-shadow: none; cursor: auto; }
+  body.reading .page-nav { display: none; }  /* swipe to turn pages */
+  .read-foot { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 998; gap: 10px;
+    align-items: center; justify-content: center; height: calc(24px + env(safe-area-inset-bottom));
+    padding: 0 max(16px, env(safe-area-inset-left)) env(safe-area-inset-bottom); border: 0; border-radius: 0;
+    background: var(--panel); color: var(--muted); font-size: 11px; font-weight: 400; }
+  .foot-chapter { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .foot-pct { flex: none; font-variant-numeric: tabular-nums; }
+}
+@media (max-width: 600px) and (prefers-reduced-motion: reduce) { body.reading .read-bar { transition: none; } }
+.read-left .profile-chip { margin-left: auto; flex: none; }
