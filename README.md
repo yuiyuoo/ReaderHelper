@@ -143,6 +143,17 @@ can open the app at all.
   Edit). **✨ Ask AI** adds the meaning in this sentence, an explanation and a translation of the whole
   sentence (15–25 s; the first time also loads the model). AI answers you already got come back instantly
   from the cache. **Translating a selected passage** always uses the AI (see below).
+- **Grammar (German words):** under the word the popover shows
+  - nouns: article and plural, with the article coloured by gender (**der** blue, **die** red, **das** green):
+    *der Schlüssel, die Schlüssel, des Schlüssels*. Words with several genders (*der/die/das Band*) use the
+    one in the sentence. Compound nouns missing in the dictionary take it from their last part
+    (*Kinderzimmerfenster* → *Fenster*). Without any entry, only the article from the sentence is shown.
+  - verbs: *er*-form · Präteritum · Perfekt, e.g. *fängt an · fing an · hat/ist angefangen*, plus
+    "unregelmäßig" for irregular verbs.
+  - adjectives: *größer · am größten*.
+
+  It comes from the German Wiktionary and is saved with the word: shown on the flashcard answer, in the
+  vocabulary list and on the Anki card. Words saved earlier get it when you save them again.
 - **Expressions** (noun-verb combinations like *in Frage stellen*, *eine Entscheidung treffen*,
   *take into account*): tapping any part shows the whole expression, e.g. *stellte … in Frage* →
   **in Frage stellen**, also in the passive or perfect (*wurde in Frage gestellt*). They are recognised from

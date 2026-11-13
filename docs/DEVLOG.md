@@ -744,6 +744,38 @@ system; and with one shared word list, everyone's saved words and reviews would 
   per-book counts; another person's word → 404; duplicate name → 409; no/unknown profile → 401.
   *Files:* `backend/db.py`, `backend/main.py`, `frontend/profile.js`, all four pages, `style.css`, `README.md`
 
+## Part 16: Learning grammar, not only meanings
+
+### 49. Article, plural and verb forms in the popover
+**Problem:** As a German learner you keep looking up the same things: *der, die or das? Plural? fing –
+gefangen, with haben or sein?* The popover only showed meanings.
+**Cause:** The English Wiktionary API (used for definitions) has no structured grammar data.
+**Fix:**
+- New `backend/grammar.py` reads the raw wikitext of the **German** Wiktionary
+  (`de.wiktionary.org/w/index.php?title=…&action=raw`). Its pages contain fixed tables
+  (`Deutsch Substantiv Übersicht`, `… Verb Übersicht`, `… Adjektiv Übersicht`) with one `|key=value` per
+  line, e.g. `|Genus=m`, `|Nominativ Plural=Schlüssel`, `|Präteritum_ich=fing an`, `|Hilfsverb=sein`.
+  Only the German section of the page is read; "unregelmäßig" comes from the heading.
+- Which table: by spaCy's part of speech. Several nouns on one page (*das Band* ribbon / *der Band* volume /
+  *die Band* music group): spaCy's **gender in this sentence** (`tok.morph`, read from article and endings)
+  picks the right one. `nlp.analyze()` now returns (lemma, POS, gender).
+- Compound nouns without a page: the longest known last part (`simplemma.is_known`) gives gender and
+  plural, with the first part put back on (*Kinderzimmerfenster* via *Zimmerfenster*). No page at all:
+  only the article spaCy saw, marked as a guess. Plural-only words (`Genus=0`): *die Eltern (nur Plural)*.
+- `/lookup` starts the grammar request as a task right after lemmatizing, so it runs alongside the
+  dictionary; it is returned also for cached AI answers, but isn't part of the AI cache. Results are kept in
+  memory; network errors aren't cached and never break the lookup (no grammar line then).
+- Saved with the word (`vocab.grammar`, short text): shown on the flashcard answer, in the vocabulary list and
+  in the Anki CSV front. Saving again without grammar keeps the old one. The article is coloured by gender
+  (shared `grammarHtml()` in `theme.js`, colours in light and dark theme).
+- Not for English (no comparable tables; irregular verbs would be the useful part – later) and not for
+  expressions.
+- *Tested:* 13 sentences (*Schlüssel, Band* ×2, *fing … an, ging, größer, Eltern, Haustürschlüssel,
+  Kinderzimmerfenster, machte … zu, schnell, Mädchen, und*) all correct; `/lookup` quick step; save + resave +
+  CSV; `check_lemmas.py` unchanged (36/37, 9/9).
+  *Files:* `backend/grammar.py`, `backend/nlp.py`, `backend/main.py`, `backend/db.py`, `frontend/reader.js`,
+  `frontend/review.*`, `frontend/vocab.html`, `frontend/theme.js`, `frontend/style.css`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
@@ -763,6 +795,9 @@ system; and with one shared word list, everyone's saved words and reviews would 
 ---
 
 ## Still open (ideas)
+- Review: cloze mode (type the missing word), other sentences with the word, reverse direction.
+- "Known" words and a vocabulary/progress counter; % unknown words per chapter.
+- English irregular verb forms in the grammar line; fill grammar for words saved before #49.
 - Edit a word directly from the review card; show review statistics (words learned per week).
 - Service worker (needs the Tailscale https address) so the app starts offline and Review works without the PC.
 - Book footnote numbers in chapter names ("Die drei Schläfer.(2)").
