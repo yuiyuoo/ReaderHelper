@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-from . import books, db, expressions, llm, nlp, srs  # noqa: E402  (after load_dotenv so config is read)
+from . import books, db, expressions, grammar, llm, nlp, srs  # noqa: E402  (after load_dotenv so config is read)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("readerhelper")
@@ -250,7 +250,7 @@ async def lookup(q: LookupIn):
     lang = nlp.detect_lang(sentence, q.lang_hint)
     try:
         sentence = await asyncio.to_thread(nlp.pick_sentence, lang, word, sentence)
-        lemma, pos = await asyncio.to_thread(nlp.lemmatize, lang, word, sentence)
+        lemma, pos, gender = await asyncio.to_thread(nlp.analyze, lang, word, sentence)
     except OSError:
         raise HTTPException(500, f"spaCy model for '{lang}' is missing. Run `python -m spacy download {nlp.MODELS[lang]}`.")
 
@@ -260,11 +260,14 @@ async def lookup(q: LookupIn):
     word_lemma = lemma  # base form of the tapped word itself
     if expr:
         lemma = expr["display"]
+    # Article/plural, verb forms, comparison (German): fetched alongside the rest, not part of the AI cache.
+    grammar_task = asyncio.create_task(grammar.grammar_of(lang, word_lemma, pos, gender) if not expr
+                                       else asyncio.sleep(0, None))
 
     variant = llm.cache_variant(q.target)
     cached = None if q.refresh else db.get_cached(lang, lemma, sentence, variant)
     if cached:
-        return {**cached, "word": word, "cached": True}
+        return {**cached, "word": word, "grammar": await grammar_task, "cached": True}
 
     # Dictionary first: the model chooses among its numbered senses (more reliable than letting a
     # small model guess). A failure in either step doesn't affect the other.
@@ -288,7 +291,7 @@ async def lookup(q: LookupIn):
         "definition": senses[0] if senses else "", "senses": senses,
         "definition_note": dict_err, "target_lang": q.target,
         "expression": {k: expr[k] for k in ("display", "words", "source")} if expr else None,
-        "definition_of": definition_of,
+        "definition_of": definition_of, "grammar": await grammar_task,
     }
     if q.quick:
         # Step 1 of two: show this at once; the client then asks again without `quick` for the model's
@@ -442,6 +445,7 @@ class VocabIn(BaseModel):
     sentence_tr: str = Field("", max_length=2000)  # translation of the whole sentence
     book_id: int | None = None                      # where it was saved, for "Open in book"
     cfi: str = Field("", max_length=1000)
+    grammar: str = Field("", max_length=300)        # e.g. "der Schlüssel, die Schlüssel" (from the popover)
 
 
 @app.post("/api/vocab")
@@ -543,7 +547,7 @@ def export_vocab(user: int = Depends(current_user)):
     buf.write("#separator:comma\n#html:true\n")
     w = csv.writer(buf, lineterminator="\n")
     for v in db.list_vocab(user):
-        front = f"<b>{v['word']}</b><br><i>{v['sentence']}</i>"
+        front = f"<b>{v['word']}</b>" + (f" <small>({v['grammar']})</small>" if v.get("grammar") else "")             + f"<br><i>{v['sentence']}</i>"
         back = f"{v['translation_vi']}<br>{v['gloss_vi']}"
         w.writerow([front, back])
     return Response(

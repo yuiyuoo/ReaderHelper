@@ -68,6 +68,7 @@ def init_db() -> None:
             "lapses": "INTEGER NOT NULL DEFAULT 0",
             "reviewed_at": "TEXT",
             "user_id": "INTEGER",                          # whose word it is (profiles, see below)
+            "grammar": "TEXT NOT NULL DEFAULT ''",         # article/plural or verb forms, shown on the card
         })
         # Profiles: you and your friends each have their own words and reviews (no passwords – access is
         # limited by Tailscale). The first profile gets all words saved before profiles existed.
@@ -123,19 +124,21 @@ def add_vocab(user_id: int, item: dict) -> dict:
             # Saving again refreshes the meaning; the review history is kept.
             conn.execute(
                 "UPDATE vocab SET word=?, translation_vi=?, gloss_vi=?, sentence_tr=?,"
-                " book_id=COALESCE(?, book_id), cfi=CASE WHEN ?='' THEN cfi ELSE ? END WHERE id=?",
+                " book_id=COALESCE(?, book_id), cfi=CASE WHEN ?='' THEN cfi ELSE ? END,"
+                " grammar=CASE WHEN ?='' THEN grammar ELSE ? END WHERE id=?",
                 (item["word"], item.get("translation_vi", ""), item.get("gloss_vi", ""),
                  item.get("sentence_tr", ""), item.get("book_id"), item.get("cfi", ""), item.get("cfi", ""),
-                 existing["id"]),
+                 item.get("grammar", ""), item.get("grammar", ""), existing["id"]),
             )
             return get_vocab(user_id, existing["id"])
         cur = conn.execute(
             "INSERT INTO vocab (lang, word, lemma, sentence, translation_vi, gloss_vi, created_at, target_lang,"
-            " sentence_tr, book_id, cfi, user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            " sentence_tr, book_id, cfi, user_id, grammar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 item["lang"], item["word"], item["lemma"], item["sentence"],
                 item.get("translation_vi", ""), item.get("gloss_vi", ""), _now(), target,
                 item.get("sentence_tr", ""), item.get("book_id"), item.get("cfi", ""), user_id,
+                item.get("grammar", ""),
             ),
         )
     return get_vocab(user_id, cur.lastrowid)

@@ -77,21 +77,27 @@ def _base_form(lang: str, tok) -> str:
 
 def lemmatize(lang: str, word: str, sentence: str) -> tuple[str, str]:
     """Return (lemma, coarse POS tag). German separable verbs are joined: "stand ... auf" -> "aufstehen"."""
+    return analyze(lang, word, sentence)[:2]
+
+
+def analyze(lang: str, word: str, sentence: str) -> tuple[str, str, str]:
+    """(lemma, coarse POS, grammatical gender as spaCy read it in this sentence: "Masc"/"Fem"/"Neut"/"")."""
     nlp = get_nlp(lang)
     if " " in word.strip():
         # Multi-word selection (phrase/idiom): English "gave up" -> "give up"; German phrases are kept
         # as written, since token lemmas would mangle them ("zu Hause" -> "zu Haus").
         if lang == "en":
-            return " ".join(t.lemma_.lower() for t in nlp(word) if not t.is_punct), ""
-        return word.strip(), ""
+            return " ".join(t.lemma_.lower() for t in nlp(word) if not t.is_punct), "", ""
+        return word.strip(), "", ""
     w = _norm(word)
     tok = next((t for t in nlp(sentence) if t.text.lower() == w), None)
     if tok is None:
         doc = nlp(word)
         tok = doc[0] if len(doc) else None
     if tok is None:
-        return word, ""
-    return token_lemma(lang, tok)
+        return word, "", ""
+    gender = (tok.morph.get("Gender") or [""])[0]
+    return (*token_lemma(lang, tok), gender)
 
 
 # German separable verbs ("fing ... an" = anfangen). spaCy's parser often misses the link when words come
