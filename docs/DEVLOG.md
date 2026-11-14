@@ -819,6 +819,17 @@ of the book's view: epub.js only re-paginates on a window resize, and a re-flow 
   real iPhone.
   *Files:* `frontend/index.html`, `frontend/reader.js`, `frontend/style.css`, `frontend/profile.js`
 
+### 52. "+ Add word": the popup covered the sentence
+**Problem:** After pressing **+ Add word** you have to tap a second word of the same sentence, but the popup
+stayed fully open – on phones a bottom sheet up to 70 % of the screen – and covered exactly that sentence.
+**Fix:** while waiting for the next word, the popup shrinks to one slim bar ("Tap another word of this
+sentence to add it to *Landluft* · Cancel", class `compact`), at the bottom on phones, and the word you started
+with is highlighted in the text for 4 s (`flashWord`) so you see which sentence it is. The full popup comes back
+with the result for both words.
+*Tested:* headless Edge at iPhone size: tap *Landluft* → sheet with the result → + Add word → one-line bar,
+sentence visible, word highlighted.
+*Files:* `frontend/reader.js`, `frontend/style.css`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
