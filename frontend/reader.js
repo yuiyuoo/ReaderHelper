@@ -940,7 +940,7 @@
    *  ask (use the AI even if it is switched off), parts (more words of an expression, "+ Add word"),
    *  single (only this word, no expression around it). */
   async function lookup(word, sentence, anchor, opts = {}) {
-    const { refresh = false, cfi = "", ask = false, parts = [], single = false } = opts;
+    const { refresh = false, cfi = "", ask = false, parts = [], single = false, sense = null } = opts;
     if (inflight) inflight.abort();
     const ctrl = (inflight = new AbortController());
     const seq = ++lookupSeq;
@@ -957,7 +957,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({ word, sentence, lang_hint: bookLang || null, refresh, target: target(), quick,
-                               parts, single }),
+                               parts, single, sense }),
         signal: ctrl.signal,
       });
       const data = await r.json().catch(() => ({}));
@@ -1044,14 +1044,19 @@
       }
       if (d.warning) html += `<div class="section warning">${esc(d.warning)}</div>`;
       const senses = d.senses || [];
-      const label = d.definition_of ? `Definition of “${d.definition_of}” (no dictionary entry for the expression)`
+      const label = d.sense_picked ? `Definition · sense ${d.sense_no} of ${senses.length} (your choice)`
+        : d.definition_of ? `Definition of “${d.definition_of}” (no dictionary entry for the expression)`
         : d.sense_no ? `Definition · sense ${d.sense_no} of ${senses.length} (chosen for this sentence)` : "Definition";
       html += `<div class="section"><div class="label">${esc(label)}</div>` +
         (d.definition ? `<div class="def">${esc(d.definition)}</div>`
                       : `<div class="note">${esc(d.definition_note || "No definition found.")}</div>`);
       if (senses.length > 1) {
-        html += `<details class="senses"><summary>All ${senses.length} senses</summary><ol>` +
-          senses.map((s, i) => `<li${i + 1 === d.sense_no ? ' class="chosen"' : ""}>${esc(s)}</li>`).join("") +
+        // Click a sense to use it: without AI it becomes the definition (and the note when saving);
+        // with an AI answer the AI is asked again for exactly this meaning.
+        html += `<details class="senses"${state.sensesOpen ? " open" : ""}><summary>All ${senses.length} senses` +
+          ` · click to choose</summary><ol>` +
+          senses.map((s, i) => `<li class="pick${i + 1 === d.sense_no ? " chosen" : ""}" data-act="pick-sense"
+            data-i="${i}" title="Use this meaning">${esc(s)}</li>`).join("") +
           `</ol></details>`;
       }
       html += `</div>`;
@@ -1092,8 +1097,24 @@
       if (act === "ask") lookup(state.word, state.sentence, state.anchor, { ...again, ask: true });
       if (act === "single") lookup(state.word, state.sentence, state.anchor, { cfi: state.cfi, single: true, ask: state.ask });
       if (act === "add") { addingTo = state; renderPopover(state, phase); flashWord(state.cfi); }
+      if (act === "pick-sense") pickSense(state, phase, Number(ev.target.closest("[data-i]").dataset.i));
       if (act === "cancel-add") { addingTo = null; renderPopover(state, phase); }
     };
+  }
+
+  /** The user chose a meaning from "All senses". */
+  function pickSense(state, phase, i) {
+    const d = state.data, sense = d?.senses?.[i];
+    if (!sense) return;
+    if (phase === "done" && (d.translation_vi || d.gloss_vi)) {
+      // An AI answer is shown: ask again, for exactly this meaning (the new answer replaces the cached one).
+      lookup(state.word, state.sentence, state.anchor,
+             { cfi: state.cfi, parts: state.parts, single: state.single, ask: true, refresh: true, sense });
+      return;
+    }
+    Object.assign(d, { definition: sense, sense_no: i + 1, sense_picked: true });
+    state.sensesOpen = true;
+    renderPopover(state, phase);
   }
 
   // On phones the popover is a bottom sheet and the Translate button sits at the bottom (CSS).

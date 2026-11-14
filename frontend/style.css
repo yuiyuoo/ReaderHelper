@@ -498,3 +498,7 @@ body.two-pages .page-card::before { content: ""; position: absolute; top: 0; bot
 .hover-tip span { opacity: .85; }
 .hover-tip small { opacity: .8; font-size: 12px; }
 .hover-tip .art { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+/* "All senses": click one to choose it. */
+.popover .senses li.pick { cursor: pointer; border-radius: 6px; padding: 2px 4px; margin-left: -4px; }
+.popover .senses li.pick:hover { background: var(--hover); }
