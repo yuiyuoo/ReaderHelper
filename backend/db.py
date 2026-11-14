@@ -80,6 +80,11 @@ def init_db() -> None:
             conn.execute("INSERT INTO users (name, created_at) VALUES ('Me', ?)", (_now(),))
         first = conn.execute("SELECT MIN(id) FROM users").fetchone()[0]
         conn.execute("UPDATE vocab SET user_id=? WHERE user_id IS NULL", (first,))
+        # Where each person is in each book, so phone and PC continue at the same place.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS positions (user_id INTEGER NOT NULL, book_id INTEGER NOT NULL,"
+            " cfi TEXT NOT NULL, percent REAL, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, book_id))"
+        )
 
 
 def _add_columns(conn, table: str, columns: dict) -> None:
@@ -269,15 +274,36 @@ BOOK_FIELDS = ("title", "author", "cover")
 
 
 def list_books(user_id: int | None = None) -> list[dict]:
-    """Most recently opened first, then most recently added. Includes how many words this person saved
-    from each book (0 without a person)."""
+    """Books this person read most recently first, then other recently opened ones, then the newest.
+    Includes this person's word count, progress (0–1 or None) and when they last read it (read_at)."""
     with _conn() as conn:
         rows = conn.execute(
             "SELECT books.*, (SELECT COUNT(*) FROM vocab WHERE vocab.book_id = books.id AND vocab.user_id = ?)"
-            " AS word_count FROM books ORDER BY opened_at IS NULL, opened_at DESC, added_at DESC, id DESC",
-            (user_id,),
+            " AS word_count, p.percent AS progress, p.updated_at AS read_at"
+            " FROM books LEFT JOIN positions p ON p.book_id = books.id AND p.user_id = ?"
+            " ORDER BY read_at IS NULL, read_at DESC, opened_at IS NULL, opened_at DESC, added_at DESC, books.id DESC",
+            (user_id, user_id),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_position(user_id: int, book_id: int) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute("SELECT cfi, percent, updated_at FROM positions WHERE user_id=? AND book_id=?",
+                           (user_id, book_id)).fetchone()
+    return dict(row) if row else None
+
+
+def save_position(user_id: int, book_id: int, cfi: str, percent: float | None) -> dict:
+    """Store where this person is in the book. Without a percentage (not computed yet) the old one stays."""
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO positions (user_id, book_id, cfi, percent, updated_at) VALUES (?,?,?,?,?)"
+            " ON CONFLICT (user_id, book_id) DO UPDATE SET cfi=excluded.cfi,"
+            " percent=COALESCE(excluded.percent, positions.percent), updated_at=excluded.updated_at",
+            (user_id, book_id, cfi, percent, _now()),
+        )
+    return get_position(user_id, book_id)
 
 
 def get_book(book_id: int) -> dict | None:
@@ -315,5 +341,6 @@ def delete_book(book_id: int) -> bool:
     with _conn() as conn:
         # Saved words stay, they just no longer point into the removed book.
         conn.execute("UPDATE vocab SET book_id=NULL, cfi='' WHERE book_id=?", (book_id,))
+        conn.execute("DELETE FROM positions WHERE book_id=?", (book_id,))
         cur = conn.execute("DELETE FROM books WHERE id=?", (book_id,))
     return cur.rowcount > 0

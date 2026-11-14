@@ -195,6 +195,24 @@ def remove_cover(book_id: int):
     return _public(db.update_book(book_id, {"cover": ""}))
 
 
+class PositionIn(BaseModel):
+    cfi: str = Field(min_length=1, max_length=1000)        # EPUB position (independent of screen size)
+    percent: float | None = Field(None, ge=0, le=1)
+
+
+@app.get("/api/books/{book_id}/position")
+def get_position(book_id: int, user: int = Depends(current_user)):
+    """Where this person last was in the book (null if never), for continuing on another device."""
+    _book_or_404(book_id)
+    return db.get_position(user, book_id)
+
+
+@app.put("/api/books/{book_id}/position")
+def put_position(book_id: int, pos: PositionIn, user: int = Depends(current_user)):
+    _book_or_404(book_id)
+    return db.save_position(user, book_id, pos.cfi, pos.percent)
+
+
 @app.post("/api/books/{book_id}/opened")
 def book_opened(book_id: int):
     _book_or_404(book_id)
