@@ -259,6 +259,7 @@ class LookupIn(BaseModel):
     target: Literal["vi", "en", "de"] = "vi"  # language of the meaning/translation
     parts: list[str] = Field(default_factory=list, max_length=5)  # words added with "+ Add word"
     single: bool = False          # "Just this word": don't look for an expression around it
+    sense: str | None = Field(None, max_length=600)  # meaning picked by the user from the list: use only this
 
 
 async def _senses(lang: str, lemma: str, word: str, pos: str, gender: str, target: str):
@@ -315,9 +316,14 @@ async def lookup(q: LookupIn):
     else:
         senses, dict_err, definition_lang = await _senses(lang, lemma, word, pos, gender, q.target)
         llm_senses = senses
+    picked = q.sense if q.sense in senses else None
+    if picked:
+        # The user chose this meaning: the model explains it in this sentence instead of choosing itself
+        # (also for an expression without its own entry, where the word's meanings aren't given otherwise).
+        llm_senses = [picked]
     base = {
         "lang": lang, "word": word, "lemma": lemma, "sentence": sentence,
-        "definition": senses[0] if senses else "", "senses": senses,
+        "definition": picked or (senses[0] if senses else ""), "senses": senses,
         "definition_note": dict_err, "target_lang": q.target,
         "definition_lang": definition_lang,  # "de" for German definitions (#55), else "en"
         "expression": {k: expr[k] for k in ("display", "words", "source")} if expr else None,
@@ -332,7 +338,7 @@ async def lookup(q: LookupIn):
         llm_result = await _run_llm(lang, expr["display"], expressions.mark(sentence, expr["spans"]), None,
                                     llm_senses, q.target, written=expr["words"])
     else:
-        llm_result = await _run_llm(lang, word, sentence, lemma, senses, q.target)
+        llm_result = await _run_llm(lang, word, sentence, lemma, llm_senses, q.target)
 
     result = {**base, "sense_no": None, "translation_vi": "", "gloss_vi": "", "sense_vi": "",
               "sentence_tr": "", "warning": None}
@@ -340,6 +346,8 @@ async def lookup(q: LookupIn):
         result.update(llm_result)
         if result["sense_no"] and llm_senses:
             result["definition"] = llm_senses[result["sense_no"] - 1]
+        if picked:  # number it in the full list shown, and remember that it was the user's choice
+            result.update(definition=picked, sense_no=senses.index(picked) + 1, sense_picked=True)
         db.put_cached(lang, lemma, sentence, variant, result)
     else:
         result["warning"] = llm_result
