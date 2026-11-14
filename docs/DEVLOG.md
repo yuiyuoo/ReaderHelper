@@ -943,6 +943,31 @@ was shown. The model can also simply choose wrong.
 the cache with the picked sense.
 *Files:* `backend/main.py`, `frontend/reader.js`, `frontend/style.css`, `README.md`
 
+### 59. Own combinations ("+ Add word") weren't highlighted; "sich" wasn't marked
+**Problem:** Words saved together with **+ Add word** (*darauf bestehen*, *sich reißen*, *nickte … zu*) were not
+highlighted in the book, and reflexive verbs never marked their *sich*.
+**Cause:** Multi-word entries were found only (a) as noun-verb expressions through the parse (#45) or (b) as
+phrases by exact spelling with the words next to each other. Own combinations fit neither, so they were only
+marked where they stood exactly as when saved – entries with "…" never. And *sich* is in the list of words
+ignored when comparing expressions (like articles).
+**Fix** (`nlp.find_lemmas`):
+- Every saved multi-word entry gets a *signature*: the base forms of its words without articles
+  (`_signature`: *darauf bestehen* → {darauf, bestehen}; *zog die Vorhänge zu* → {zuziehen, vorhang}). A
+  signature of one base form (*nickte zu* = zunicken) is matched like a single word.
+- `_near_matches`: in each sentence, the tokens whose base forms together give the whole signature, at most
+  len + 3 tokens from first to last – any order and form (*erwiderte halbherzig*, *bestand … darauf*).
+- *sich* stays in the signature, and every German reflexive pronoun (tag PRF: mich, dich, sich, uns, euch)
+  counts as "sich", so *sich wälzen* marks *ich wälzte **mich***. "ß" = "ss" (an entry saved as "reissen").
+- Pitfall from the regression test: a saved *eine Frage stellen* (signature {frage, stellen}) now marked
+  *stellte … **in** Frage*. A noun that stands with a preposition in the text only counts if the entry has that
+  preposition too. The paragraph cache stores sentence, token index and that preposition per token.
+- Spans found by several rules are kept once.
+- Limit: spaCy's small German model sometimes mis-tags the verb (*Nonna Maria **nickte** Laura freundlich zu*:
+  "nickte" as an adjective), then nothing can match.
+*Tested:* new block in `check_lemmas.py`, 7/7 (incl. two that must *not* match: *bestand die Prüfung … darauf*,
+*wäscht sich*); expressions 9/9 and the *in Frage stellen* ≠ *eine Frage stellen* check unchanged.
+*Files:* `backend/nlp.py`, `tools/check_lemmas.py`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |

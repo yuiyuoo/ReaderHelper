@@ -211,6 +211,9 @@ can open the app at all.
     it. Words without a saved meaning are shown as normal cards.
 - Saved words are highlighted in the text (Chrome/Edge 105+, Firefox 140+, Safari 17.2+). The marker
   button in the reader's top bar turns that on or off.
+  Saved combinations (**+ Add word**, selected phrases) are found in any form and order when their words
+  stand close together in one sentence: a saved *darauf bestehen* marks *Sie bestand darauf*, *sich wälzen*
+  marks *ich wälzte mich* (the reflexive pronoun is marked too).
   With a mouse, **hovering** a highlighted word shows its saved meaning in a small tip (short: translation,
   the start of the note, grammar) – no click needed. Phones have no hover: tap the word as usual.
 
