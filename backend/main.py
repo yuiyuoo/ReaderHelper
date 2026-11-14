@@ -261,6 +261,16 @@ class LookupIn(BaseModel):
     single: bool = False          # "Just this word": don't look for an expression around it
 
 
+async def _senses(lang: str, lemma: str, word: str, pos: str, gender: str, target: str):
+    """Dictionary meanings as (senses, error). German words with German as the meaning language get German
+    definitions from de.wiktionary (same page as the grammar line); otherwise, or if it has none, the
+    English ones (dictionaryapi.dev / en.wiktionary) as before."""
+    if lang == "de" and target == "de":
+        if (de := await grammar.german_senses(lemma, pos, gender)):
+            return de, None
+    return await nlp.fetch_senses(lang, lemma, word, pos)
+
+
 @app.post("/lookup")
 async def lookup(q: LookupIn):
     word = q.word.strip()
@@ -299,10 +309,10 @@ async def lookup(q: LookupIn):
         if not senses:
             # No entry for the expression ("Hunger haben"): show the tapped word's meanings as a help,
             # but don't give them to the model, which would mix up the word and the expression.
-            senses, dict_err = await nlp.fetch_senses(lang, word_lemma, word, pos)
+            senses, dict_err = await _senses(lang, word_lemma, word, pos, gender, q.target)
             definition_of, llm_senses = word, []
     else:
-        senses, dict_err = await nlp.fetch_senses(lang, lemma, word, pos)
+        senses, dict_err = await _senses(lang, lemma, word, pos, gender, q.target)
         llm_senses = senses
     base = {
         "lang": lang, "word": word, "lemma": lemma, "sentence": sentence,
