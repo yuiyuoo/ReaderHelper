@@ -139,6 +139,9 @@ can open the app at all.
   - Top bar: **chapter menu** (current chapter name, click for the table of contents), **reading progress**
     in %, **A− / A+** text size, **Meaning VI / EN / DE**, auto-play audio, light/dark switch, vocabulary.
   - The book is shown as a centred page in Literata; ‹ › or the arrow keys turn pages.
+  - **Go to any position:** click the **%** in the top bar, drag the slider (it shows the % and the chapter)
+    and let go. After a jump (also from the chapter menu) **↩ Back to 37 %** at the bottom returns to where you
+    were reading. The jump counts as your new position (saved and synced).
   - **Two pages side by side** (open-book button next to A+): left and right page like a real book, with a
     fold in the middle; ‹ › turn two pages at once. Remembered; on narrow screens it stays one page.
     Switching keeps you at the same text.

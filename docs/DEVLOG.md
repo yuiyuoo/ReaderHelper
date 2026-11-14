@@ -983,6 +983,21 @@ all offsets back to the original text, so the browser's ranges stay right.
 *auf*; two new cases with line breaks in `check_lemmas.py` (combinations 9/9, the rest unchanged).
 *Files:* `backend/nlp.py`, `tools/check_lemmas.py`
 
+### 61. Jump to any position, with "back to where you were"
+**Problem:** The only ways to move were page turns and the chapter menu; no way to go to e.g. 70 %.
+**Fix:**
+- The % in the top bar is a button that opens a slider (0–1000 steps). While dragging it shows the % and the
+  chapter there (`book.locations.cfiFromPercentage` → spine index → last chapter starting at or before it);
+  letting go jumps. No live jumping while dragging – re-rendering a page is too slow for that. Before the
+  locations are computed (first opening of a long book) the slider is disabled with a note.
+- `jumpTo()` (slider and chapter menu) remembers the reading position before the *first* jump, so after several
+  jumps **↩ Back to 37 %** still leads to where you were; × dismisses it. A jump sets `moved`, so it is saved
+  and synced like a page turn (#53).
+- On phones the panel sits under the (overlaid) top bar; hiding the bar closes it.
+*Tested:* headless Edge: 37 % → open slider → preview "50 % · 2008" → let go → 50 %, chip "↩ Back to 37 %" →
+click → 37 %, chip gone.
+*Files:* `frontend/index.html`, `frontend/reader.js`, `frontend/style.css`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
