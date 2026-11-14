@@ -736,16 +736,20 @@
   });
 
   /** Short selections (≤ 4 words) are looked up like a word, with their sentence as context;
-   *  longer ones are translated as a passage. */
+   *  longer ones – and any whole sentence, however short – are translated as a passage.
+   *  Selecting is a deliberate choice, so the AI is always asked (single words only on "Ask AI"). */
   function translateSelection({ text, range, anchor, cfi }) {
-    const phrase = text.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    const trim = (s) => s.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    const phrase = trim(text);
     const words = phrase.split(" ").filter(Boolean);
     if (words.length && words.length <= MAX_PHRASE_WORDS && !/[.!?;:]\s/.test(phrase)) {
       const node = range.startContainer;
       const context = node.nodeType === Node.TEXT_NODE
         ? sentenceAt({ node, offset: range.startOffset, word: phrase })
         : phrase;
-      lookup(phrase, context.includes(phrase) ? context : phrase, anchor, { cfi });
+      // The whole (short) sentence selected, e.g. "Er ging nach Hause.": translate it as a sentence.
+      if (words.length > 1 && trim(context) === phrase) return translatePassage(text, anchor);
+      lookup(phrase, context.includes(phrase) ? context : phrase, anchor, { cfi, ask: true });
     } else {
       translatePassage(text, anchor);
     }
