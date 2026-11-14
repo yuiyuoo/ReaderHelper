@@ -186,6 +186,8 @@ can open the app at all.
   - **A whole sentence**, even a short one (*Jetzt sind wir da.*), is translated as a sentence.
   - **Longer selections** (up to about 600 characters, 3–4 sentences) get a natural Vietnamese translation
     plus up to 3 notes on difficult words. 🔊 reads the original text aloud. This takes about 10–20 s.
+    Each note has **+ Save**: the word goes into your vocabulary with the note as its meaning, its base form,
+    grammar and the sentence it stands in (no second AI call).
 - **Vocabulary:** the **Vocabulary** page lists saved words. **Edit** lets you fix the Vietnamese translation,
   the explanation, or shorten the sentence (Ctrl+Enter saves, Esc cancels). This is useful when the model got
   a word wrong. **Export CSV (Anki)** downloads a file where

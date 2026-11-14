@@ -889,6 +889,23 @@ Duden (no public API). Only the German Wiktionary gives free German definitions.
 - Follow-up: words saved **without** the AI keep the definition as their note; its language was hard-coded
   "en". `/lookup` now returns `definition_lang` ("de"/"en") and the reader saves with that.
 
+### 56. Save words from a passage translation's notes
+**Problem:** A passage translation lists up to 3 difficult words with explanations ("milderte: làm dịu, giảm
+bớt"), but to save one you had to close it, tap the word and ask again.
+**Fix:** each note has a **+ Save** button. `saveNote()` runs the quick `/lookup` step for the note's term with
+the passage as context (`single: true`): that gives the base form, the sentence the word stands in (the server
+picks it from the passage) and the grammar line. Then it saves with the note's explanation as the meaning and
+the passage's meaning language; the sentence translation only if the passage *is* that one sentence. The
+passage keeps its book position (`cfi`) for "Open in book". No second AI call.
+**Found on the way:** *milderte* got the base form "milderen". spaCy turns many -ern/-eln verbs into
+"-eren/-elen" (*wanderen, zögeren, lächelen*); the "is it a known word?" check normally catches that, but
+*milderen* happens to be a form of the adjective *mild*. Now, for verbs, "-eren/-elen" becomes "-ern/-eln" when
+that is a known word (*studieren, leeren, scheren* stay). Two new cases in `check_lemmas.py` (38/39).
+*Tested:* API (Freundlichkeit / milderte / Widerwillen from a two-sentence passage → right lemma, sentence,
+grammar); headless Edge with the real model: select two sentences → Translate → **+ Save** on *Abfahrt* →
+"Saved ✓", saved with lemma, grammar, first sentence, book, Vietnamese explanation; highlighted in the book.
+*Files:* `frontend/reader.js`, `frontend/style.css`, `backend/nlp.py`, `tools/check_lemmas.py`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
