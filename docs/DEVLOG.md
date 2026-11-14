@@ -906,6 +906,26 @@ grammar); headless Edge with the real model: select two sentences → Translate 
 "Saved ✓", saved with lemma, grammar, first sentence, book, Vietnamese explanation; highlighted in the book.
 *Files:* `frontend/reader.js`, `frontend/style.css`, `backend/nlp.py`, `tools/check_lemmas.py`, `README.md`
 
+### 57. Hover a highlighted word to see its saved meaning
+**Problem:** For a saved word you often only need a quick reminder, but the only way was clicking it, which
+opens the full popup and looks it up again.
+**Cause / constraint:** Highlights are CSS Custom Highlight ranges, not elements – there are no hover events
+for them, and the ranges didn't know which saved word they belong to.
+**Fix:**
+- `/api/highlights` spans are now `[start, end, saved base form]` (expressions: their saved form); spelling
+  matches (phrases) use their spelling. The reader keeps a map base form/spelling → saved entry (newest wins),
+  built from the `/api/vocab` list it already loads.
+- On `mousemove` in the book (throttled to one check per frame) it tests whether the pointer is inside one of the
+  saved ranges' screen rectangles; after 350 ms a dark tip above the word shows the translation (or the start of
+  the note), the note shortened to 90 characters, and the grammar line. Hidden when the mouse leaves, on click,
+  scroll, page turn or when the popup opens. Only for devices with a real hover (`(hover: hover) and
+  (pointer: fine)`), so taps on phones are unchanged.
+- *Tested:* headless Edge with real mouse events over saved words: phrase (*halbherzig erwiderte* → Vietnamese
+  meaning + note), base-form match (*stellte … ab* → meaning of *abstellen* + forms, on both parts), tip hides
+  when the mouse moves away. `check_lemmas.py` adapted to the new span format (38/39, 9/9).
+  *Files:* `backend/nlp.py`, `backend/main.py`, `frontend/reader.js`, `frontend/style.css`,
+  `tools/check_lemmas.py`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
