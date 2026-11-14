@@ -152,7 +152,7 @@ can open the app at all.
   word** straight away (the English dictionary meaning becomes the note; add a Vietnamese one later with
   Edit). **✨ Ask AI** adds the meaning in this sentence, an explanation and a translation of the whole
   sentence (15–25 s; the first time also loads the model). AI answers you already got come back instantly
-  from the cache. **Translating a selected passage** always uses the AI (see below).
+  from the cache. **Selected text** (a phrase or sentences) always uses the AI (see below).
 - **Grammar (German words):** under the word the popover shows
   - nouns: article and plural, with the article coloured by gender (**der** blue, **die** red, **das** green):
     *der Schlüssel, die Schlüssel, des Schlüssels*. Words with several genders (*der/die/das Band*) use the
@@ -178,7 +178,9 @@ can open the app at all.
 - **Translate a selection:** select text with the mouse (or Shift + arrow keys), then press the
   **Dịch · Translate** button that appears.
   - **Up to 4 words** (*gave up*, *zu Hause*, *ein wenig*) are looked up like a word: dictionary entry,
-    translation, meaning in this sentence, and **Save word**, so phrases can go into your vocabulary.
+    translation, meaning in this sentence, and **Save word**, so phrases can go into your vocabulary. Unlike a
+    tapped word, the AI answer comes automatically (selecting is a deliberate choice).
+  - **A whole sentence**, even a short one (*Jetzt sind wir da.*), is translated as a sentence.
   - **Longer selections** (up to about 600 characters, 3–4 sentences) get a natural Vietnamese translation
     plus up to 3 notes on difficult words. 🔊 reads the original text aloud. This takes about 10–20 s.
 - **Vocabulary:** the **Vocabulary** page lists saved words. **Edit** lets you fix the Vietnamese translation,

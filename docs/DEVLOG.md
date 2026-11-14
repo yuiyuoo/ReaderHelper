@@ -853,6 +853,18 @@ on the phone (on iPhone even Safari and the home-screen app had separate positio
   real devices are visible when you come back.
   *Files:* `backend/db.py`, `backend/main.py`, `frontend/reader.js`, `frontend/library.js`, `README.md`
 
+### 54. Selected text: AI by default
+**Problem:** Selecting a short sentence and pressing Translate gave only a dictionary result (usually "no
+entry") instead of a translation.
+**Cause:** Selections of up to 4 words are looked up like a word, and since #46 words get the AI only on
+"Ask AI". A short sentence such as *Jetzt sind wir da.* has 4 words, so it ended up there too.
+**Fix:** `translateSelection()` passes `ask: true` for phrases (dictionary first, then the AI answer
+automatically), and a selection that is the whole sentence (compared with the sentence around it, ignoring
+punctuation at the ends) goes to `/translate` as a passage. Tapped single words stay dictionary-only.
+*Tested:* headless Edge, selection + Translate button: *An der Abfahrt* → `/lookup` twice (quick step, then the
+AI); *Jetzt sind wir da.* → `/translate`.
+*Files:* `frontend/reader.js`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
