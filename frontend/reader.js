@@ -1040,7 +1040,8 @@
     if (d.translation_vi || d.gloss_vi) {
       return { translation_vi: d.translation_vi, gloss_vi: d.gloss_vi, target_lang: d.target_lang || "vi" };
     }
-    return { translation_vi: "", gloss_vi: d.definition || "", target_lang: "en" };
+    // No AI answer: the dictionary definition becomes the note, in its own language (German ones: "de").
+    return { translation_vi: "", gloss_vi: d.definition || "", target_lang: d.definition_lang || "en" };
   }
 
   async function saveWord(state, btn) {

@@ -262,13 +262,13 @@ class LookupIn(BaseModel):
 
 
 async def _senses(lang: str, lemma: str, word: str, pos: str, gender: str, target: str):
-    """Dictionary meanings as (senses, error). German words with German as the meaning language get German
+    """Dictionary meanings as (senses, error, their language). German words with German as the meaning language get German
     definitions from de.wiktionary (same page as the grammar line); otherwise, or if it has none, the
     English ones (dictionaryapi.dev / en.wiktionary) as before."""
     if lang == "de" and target == "de":
         if (de := await grammar.german_senses(lemma, pos, gender)):
-            return de, None
-    return await nlp.fetch_senses(lang, lemma, word, pos)
+            return de, None, "de"
+    return (*await nlp.fetch_senses(lang, lemma, word, pos), "en")
 
 
 @app.post("/lookup")
@@ -299,6 +299,7 @@ async def lookup(q: LookupIn):
 
     # Dictionary first: the model chooses among its numbered senses (more reliable than letting a
     # small model guess). A failure in either step doesn't affect the other.
+    definition_lang = "en"  # language of the definitions shown
     definition_of = None  # set when the definitions shown are those of the tapped word, not the expression
     if expr:
         senses = expr.get("senses")
@@ -309,15 +310,16 @@ async def lookup(q: LookupIn):
         if not senses:
             # No entry for the expression ("Hunger haben"): show the tapped word's meanings as a help,
             # but don't give them to the model, which would mix up the word and the expression.
-            senses, dict_err = await _senses(lang, word_lemma, word, pos, gender, q.target)
+            senses, dict_err, definition_lang = await _senses(lang, word_lemma, word, pos, gender, q.target)
             definition_of, llm_senses = word, []
     else:
-        senses, dict_err = await _senses(lang, lemma, word, pos, gender, q.target)
+        senses, dict_err, definition_lang = await _senses(lang, lemma, word, pos, gender, q.target)
         llm_senses = senses
     base = {
         "lang": lang, "word": word, "lemma": lemma, "sentence": sentence,
         "definition": senses[0] if senses else "", "senses": senses,
         "definition_note": dict_err, "target_lang": q.target,
+        "definition_lang": definition_lang,  # "de" for German definitions (#55), else "en"
         "expression": {k: expr[k] for k in ("display", "words", "source")} if expr else None,
         "definition_of": definition_of, "grammar": await grammar_task,
     }
