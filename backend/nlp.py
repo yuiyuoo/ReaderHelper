@@ -248,6 +248,23 @@ def _near_matches(tokens: list, sig: frozenset[str]) -> list[list[int]]:
     return spans
 
 
+def _collapse(text: str) -> tuple[str, list[int]]:
+    """Text with every run of whitespace as one space, and for each of its characters the position in the
+    original (plus the end). EPUB source often breaks lines inside sentences ("Jeder Schritt\n      wirbelte …
+    auf"); spaCy makes such a line break a token of its own, which spoils the parse ("wirbelte … auf" was no
+    longer recognised as aufwirbeln). A clicked sentence is collapsed the same way in /lookup."""
+    out, pos = [], []
+    for i, ch in enumerate(text):
+        if ch.isspace():
+            if not out or out[-1] == " ":
+                continue
+            ch = " "
+        out.append(ch)
+        pos.append(i)
+    pos.append(len(text))
+    return "".join(out), pos
+
+
 def find_lemmas(lang: str, paragraphs: list[str], lemmas: set[str]) -> list[list[list]]:
     """For each paragraph, [start, end, saved base form] spans of saved words (the base form lets the reader
     show the saved meaning on hover):
@@ -270,15 +287,18 @@ def find_lemmas(lang: str, paragraphs: list[str], lemmas: set[str]) -> list[list
             sigs.append((sig, l.lower()))
     todo = [p for p in dict.fromkeys(paragraphs) if (lang, p) not in _PARA_CACHE]
     if todo:
-        for text, doc in zip(todo, get_nlp(lang).pipe(todo, batch_size=64)):
+        collapsed = [_collapse(p) for p in todo]
+        for text, (clean, pos), doc in zip(todo, collapsed, get_nlp(lang).pipe([c for c, _ in collapsed], batch_size=64)):
             if len(_PARA_CACHE) >= _PARA_CACHE_MAX:
                 _PARA_CACHE.clear()  # simple bound; it refills from what is being read
+            # Offsets in the collapsed text -> offsets in the paragraph as the browser sent it.
+            back = lambda a, b: (pos[a], pos[b - 1] + 1)  # noqa: E731
             _PARA_CACHE[(lang, text)] = (
                 # (start, end, base form, sentence, token index, preposition a noun stands with or "")
-                [(t.idx, t.idx + len(t.text), _hl_lemma(lang, t), t.sent.start, t.i,
+                [(*back(t.idx, t.idx + len(t.text)), _hl_lemma(lang, t), t.sent.start, t.i,
                   t.head.text.lower() if t.pos_ in ("NOUN", "PROPN") and t.head.pos_ == "ADP" else "")
                  for t in doc if t.is_alpha],
-                expressions.all_in(lang, doc),
+                [(key, [list(back(a, b)) for a, b in parts]) for key, parts in expressions.all_in(lang, doc)],
             )
     out = []
     for p in paragraphs:

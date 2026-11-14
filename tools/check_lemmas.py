@@ -109,6 +109,9 @@ combo_cases = [
     ("halbherzig erwiderte", "Sie erwiderte halbherzig.", ["erwiderte", "halbherzig"]),
     ("darauf bestehen", "Er bestand die Prüfung und freute sich darauf.", []),
     ("sich wälzen", "Er wäscht sich die Hände.", []),
+    # line break + indentation from the EPUB source inside the sentence (#60)
+    ("aufwirbeln", "Jeder Schritt\n            wirbelte kleine Staubwolken auf, die klebten.", ["wirbelte", "auf"]),
+    ("in Frage stellen", "Er stellte  alles\n   in Frage.", ["stellte", "in", "Frage"]),
 ]
 ok = 0
 for saved, s, exp in combo_cases:
