@@ -66,6 +66,13 @@ def _base_form(lang: str, tok) -> str:
     lemma = tok.lemma_.strip() or tok.text
     if lang != "de" or tok.pos_ in ("PROPN", "PUNCT", "NUM"):
         return lemma
+    # spaCy turns -ern/-eln verbs into "-eren/-elen" ("wanderte" -> "wanderen", "lächelte" -> "lächelen").
+    # Usually the check below catches that, but some of these happen to be words: "milderen" is a form of
+    # the adjective "mild". So for verbs: "-eren"/"-elen" -> "-ern"/"-eln" if that is a known word.
+    if tok.pos_ in ("VERB", "AUX") and lemma.endswith(("eren", "elen")):
+        short = lemma[:-2] + "n"
+        if simplemma.is_known(short, lang="de"):
+            return short
     # Ask simplemma when spaCy left the word unchanged, or produced something that isn't a German word
     # (spaCy guessed "fortwarfsen" for "fortwarfst"; simplemma knows "fortwerfen").
     if lemma.lower() == tok.text.lower() or not simplemma.is_known(lemma, lang="de"):

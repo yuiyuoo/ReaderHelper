@@ -15,6 +15,8 @@ from backend import nlp
 # (sentence, clicked word, expected base form)
 cases = [
     # separated, many different particles and verbs
+    ("Chiaras Freundlichkeit milderte den Widerwillen.", "milderte", "mildern"),  # spaCy: "milderen"
+    ("Sie lächelte und wanderte weiter.", "lächelte", "lächeln"),
     ("Der Zug kam pünktlich in Berlin an.", "kam", "ankommen"),
     ("Wir kauften am Samstag im Supermarkt ein.", "kauften", "einkaufen"),
     ("Sie nahm ihren kleinen Bruder mit.", "nahm", "mitnehmen"),
