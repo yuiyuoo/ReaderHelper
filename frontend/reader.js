@@ -90,7 +90,10 @@
     try {
       await book.ready;
       bookLang = (book.packaging.metadata.language || "").slice(0, 2).toLowerCase();
-      await displayAt(jumpCfi || store.get(`pos:${bookName}`));
+      // "Open in book" (a saved word) is a new position; otherwise continue where you last read.
+      if (jumpCfi) { moved = true; await displayAt(jumpCfi); }
+      else await showStored(await startPosition());
+      if (store.get(dirtyKey())) pushPosition();
       if (jumpCfi) {
         flashWord(jumpCfi);
         // A later reload should continue where you read, not jump to the word again.
@@ -228,6 +231,7 @@
     if (!b) return;
     setTocOpen(false);
     spreadAnchor = null;
+    moved = true;
     rendition?.display(tocItems[b.dataset.i].href);
   });
   // pointerdown, not mousedown: iPhone Safari sends no mouse events for taps on plain areas.
@@ -266,16 +270,97 @@
   function onRelocated(loc) {
     lastLocation = loc;
     hideSelBtn();
-    store.set(`pos:${bookName}`, loc.start.cfi);
+    if (moved) savePosition(loc.start.cfi);
+    else store.set(posKey(), loc.start.cfi);
     updateChapter(loc);
     updateProgress(loc);
   }
 
+
+  // ---------- reading position, shared by your devices (per person, stored on the server) ----------
+  // localStorage keeps the position too, so reading works when the server can't be reached; "posDirty"
+  // marks a position this device hasn't delivered yet. Such a position wins over the server's when the
+  // book is opened. No clocks are compared: phone and PC clocks can differ.
+  let serverAt = null;     // updated_at of the server position we last saw or wrote
+  // Only your own navigation (page turn, chapter menu, "Open in book") is a new position. epub.js also
+  // reports "relocated" after showing a stored position, e.g. again once the web font has loaded; sending
+  // that would make your other device jump for nothing.
+  let moved = false;
+  let pushTimer = null;
+  const posKey = () => `pos:${bookName}`;
+  const dirtyKey = () => `posDirty:${bookName}`;
+
+  async function fetchPosition() {
+    try {
+      const r = await fetch(`/api/books/${currentBookId}/position`);
+      return r.ok ? await r.json() : null;
+    } catch { return null; }
+  }
+
+  /** Where to open the book: this device's undelivered position, else the server's, else this device's. */
+  async function startPosition() {
+    const local = store.get(posKey());
+    if (local && store.get(dirtyKey())) return local;
+    const p = await fetchPosition();
+    if (p) { serverAt = p.updated_at; return p.cfi; }
+    if (local) store.set(dirtyKey(), "1");  // read here before positions were synced: hand it over
+    return local;
+  }
+
+  function currentPercent() {
+    const loc = lastLocation;
+    if (!loc?.start || !book?.locations?.length()) return null;
+    return loc.atEnd ? 1 : book.locations.percentageFromCfi(loc.start.cfi);
+  }
+
+  function savePosition(cfi) {
+    store.set(posKey(), cfi);
+    store.set(dirtyKey(), "1");
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(pushPosition, 1500);  // after a short pause: not one request per page turn
+  }
+
+  async function pushPosition(keepalive = false) {
+    clearTimeout(pushTimer);
+    const cfi = store.get(posKey());
+    if (!cfi || !store.get(dirtyKey()) || currentBookId == null) return;
+    try {
+      const r = await fetch(`/api/books/${currentBookId}/position`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, keepalive,
+        body: JSON.stringify({ cfi, percent: currentPercent() }),
+      });
+      if (!r.ok) return;
+      serverAt = (await r.json()).updated_at;
+      if (store.get(posKey()) === cfi) store.set(dirtyKey(), "");  // delivered (unless you read on meanwhile)
+    } catch { /* offline: stays marked, delivered next time */ }
+  }
+
+  async function showStored(cfi) {
+    moved = false;
+    await displayAt(cfi);
+  }
+
+  // Leaving the page or switching apps: deliver now. Coming back: did you read on on another device?
+  window.addEventListener("pagehide", () => pushPosition(true));
+  document.addEventListener("visibilitychange", async () => {
+    if (!rendition || currentBookId == null) return;
+    if (document.visibilityState === "hidden") return pushPosition(true);
+    if (store.get(dirtyKey())) return pushPosition();
+    const p = await fetchPosition();
+    if (!p || p.updated_at === serverAt) return;
+    serverAt = p.updated_at;
+    if (p.cfi === lastLocation?.start?.cfi) return;
+    closePopover();
+    await showStored(p.cfi);
+    store.set(posKey(), p.cfi);
+    setStatus(`Continued where you last read${p.percent != null ? ` (${Math.round(p.percent * 100)} %)` : ""}.`);
+  });
+
   // ---------- controls ----------
 
   // Turning pages yourself ends the "same text as before switching one/two pages" memory.
-  const goPrev = () => { spreadAnchor = null; setBars(false); rendition?.prev(); };
-  const goNext = () => { spreadAnchor = null; setBars(false); rendition?.next(); };
+  const goPrev = () => { spreadAnchor = null; moved = true; setBars(false); rendition?.prev(); };
+  const goNext = () => { spreadAnchor = null; moved = true; setBars(false); rendition?.next(); };
 
   // ---------- focus mode (phones): only the book on screen ----------
   // The top bar lies over the page instead of taking room, so showing/hiding it never changes the page
@@ -337,7 +422,7 @@
     if (!rendition) return;
     // Re-layouting in place makes epub.js jump to the start of the section (and save that position),
     // so the view is rebuilt and opened at the text that was on screen.
-    const cfi = spreadAnchor || lastLocation?.start?.cfi || store.get(`pos:${bookName}`);
+    const cfi = spreadAnchor || lastLocation?.start?.cfi || store.get(posKey());
     spreadAnchor = cfi;
     closePopover();
     hideSelBtn();

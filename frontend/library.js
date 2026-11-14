@@ -43,7 +43,9 @@
   const PENCIL = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10.5 2.5l3 3L5 14H2v-3l8.5-8.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
 
   function card(b) {
-    const when = b.opened_at ? `Opened ${relTime(b.opened_at)}` : "Not opened yet";
+    // Per person: when *you* last read it and how far (synced across your devices).
+    const when = (b.read_at ? `Read ${relTime(b.read_at)}` : "Not started") +
+      (b.progress != null ? ` · ${Math.round(b.progress * 100)} %` : "");
     const words = b.word_count ? ` · ${b.word_count} word${b.word_count === 1 ? "" : "s"}` : "";
     return `<article class="book-card">
       <a class="book-open" href="/read?book=${b.id}" aria-label="Read ${esc(b.title)}">
