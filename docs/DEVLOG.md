@@ -968,6 +968,21 @@ ignored when comparing expressions (like articles).
 *wäscht sich*); expressions 9/9 and the *in Frage stellen* ≠ *eine Frage stellen* check unchanged.
 *Files:* `backend/nlp.py`, `tools/check_lemmas.py`, `README.md`
 
+### 60. A saved word wasn't highlighted: line breaks from the EPUB source
+**Problem:** *wirbelte* (saved as *aufwirbeln*, from "Jeder Schritt wirbelte kleine Staubwolken auf") wasn't
+highlighted, although tapping it worked.
+**Cause:** The reader sends each paragraph's text as it is in the EPUB file – often with line breaks and
+indentation inside sentences ("Jeder Schritt
+            wirbelte …"). spaCy makes such whitespace a token of
+its own, and that spoiled the parse: "wirbelte" got the lemma "wirbelt" instead of being joined with "auf".
+`/lookup` always collapsed the whitespace of a clicked sentence, so taps were fine – only highlighting suffered,
+in every book with line-broken source.
+**Fix:** `find_lemmas` analyses each paragraph with whitespace runs collapsed to one space (`_collapse`) and maps
+all offsets back to the original text, so the browser's ranges stay right.
+*Tested:* the same page in headless Edge: before 188 highlights without *wirbelte*, after 190 with *wirbelte* +
+*auf*; two new cases with line breaks in `check_lemmas.py` (combinations 9/9, the rest unchanged).
+*Files:* `backend/nlp.py`, `tools/check_lemmas.py`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
