@@ -830,6 +830,29 @@ with the result for both words.
 sentence visible, word highlighted.
 *Files:* `frontend/reader.js`, `frontend/style.css`
 
+### 53. Phone and PC continue at the same place
+**Problem:** The reading position lived only in each browser's localStorage: the PC didn't know where you were
+on the phone (on iPhone even Safari and the home-screen app had separate positions), and it wasn't per person.
+**Fix:**
+- Table `positions (user_id, book_id, cfi, percent, updated_at)`, `GET/PUT /api/books/{id}/position` (per
+  profile). A CFI points into the book's text, not to a page, so it works across screen sizes and one/two pages.
+- Opening a book: the server's position, unless this device has one it couldn't deliver yet (`posDirty:<file>`
+  in localStorage – read offline); a device-only position from before this change is handed over once.
+  No timestamps of different devices are compared (their clocks can differ); only the server's `updated_at`.
+- Saving: localStorage at once, the server 1.5 s after the last page turn, and immediately (`keepalive`) when
+  the page is hidden or closed. Coming back to an open reader (`visibilitychange`): if the server's
+  `updated_at` changed and the place differs, jump there and say so.
+- Pitfall found in testing: epub.js also reports `relocated` after a *stored* position is shown (e.g. again
+  when the web font has loaded), slightly different per screen size. Sending that made the other device jump
+  for nothing. Now only your own navigation (page turn, chapter menu, "Open in book") counts as a new position.
+- Library: ordered by when *you* last read (`read_at`), with "Read 2 h ago · 27 %".
+- *Tested:* two headless Edge instances with separate storage (phone 390×844, PC 1280×800) against a copy of
+  the database: phone reads to 18 % → PC opens at 17 % (same text, other line breaks) and doesn't write back →
+  PC reads to 27 % → phone comes back: jumps to 26 % with "Continued where you last read (27 %)". Note: in a
+  *hidden* headless page the jump never finished – the reader waits for a frame that hidden pages don't draw;
+  real devices are visible when you come back.
+  *Files:* `backend/db.py`, `backend/main.py`, `frontend/reader.js`, `frontend/library.js`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |

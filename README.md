@@ -131,7 +131,11 @@ can open the app at all.
   - The ✎ button on each book edits name, author and picture, or removes the book (the EPUB file is
     deleted; saved words stay).
   - `.epub` files copied into `books/` by hand appear automatically. Cover pictures are stored in `covers/`.
-- **Reader:** opens at `/read?book=<id>`; **‹** goes back to the library. It remembers your position for each book.
+- **Reader:** opens at `/read?book=<id>`; **‹** goes back to the library. It remembers your position for each
+  book **on the server, per person**: read on the phone, open the book on the PC and it continues there (and
+  the other way round). An app that is already open checks when you come back to it and jumps to where you
+  read on the other device ("Continued where you last read"). Without connection the position is kept on the
+  device and sent later. The library shows when *you* last read each book and how far (%).
   - Top bar: **chapter menu** (current chapter name, click for the table of contents), **reading progress**
     in %, **A− / A+** text size, **Meaning VI / EN / DE**, auto-play audio, light/dark switch, vocabulary.
   - The book is shown as a centred page in Literata; ‹ › or the arrow keys turn pages.
