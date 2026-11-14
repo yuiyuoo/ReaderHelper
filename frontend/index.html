@@ -41,9 +41,17 @@
     </div>
 
     <div class="read-right">
-      <div class="progress" title="Reading progress">
-        <span id="progressPct">–</span>
-        <div class="progress-track" aria-hidden="true"><div id="progressFill" class="progress-fill"></div></div>
+      <div class="seek-wrap">
+        <button id="progressBtn" class="progress" type="button" aria-haspopup="dialog" aria-expanded="false"
+                aria-controls="seekPanel" title="Reading progress – click to go to another position">
+          <span id="progressPct">–</span>
+          <span class="progress-track" aria-hidden="true"><span id="progressFill" class="progress-fill"></span></span>
+        </button>
+        <div id="seekPanel" class="seek-panel" role="dialog" aria-label="Go to a position" hidden>
+          <div class="seek-head"><b id="seekPct">–</b><span id="seekChapter" class="seek-chapter"></span></div>
+          <input id="seekRange" type="range" min="0" max="1000" step="1" value="0" aria-label="Position in the book">
+          <p id="seekNote" class="seek-note">Drag and let go to jump there.</p>
+        </div>
       </div>
       <div class="seg" role="group" aria-label="Text size">
         <button id="fontDown" type="button" aria-label="Smaller text" title="Smaller text">A−</button>
@@ -94,6 +102,10 @@
   <button id="readFoot" class="read-foot" type="button" aria-label="Show the menu">
     <span id="footChapter" class="foot-chapter"></span><span id="footPct" class="foot-pct"></span>
   </button>
+  <!-- After jumping (progress slider or chapter menu): back to where you were reading. -->
+  <div id="backChip" class="back-chip" hidden>
+    <button id="backBtn" type="button"></button><button id="backClose" type="button" aria-label="Dismiss">×</button>
+  </div>
   <div id="status" class="read-status" role="status" aria-live="polite" hidden></div>
 
   <div id="popover" class="popover" hidden role="dialog" aria-live="polite"></div>

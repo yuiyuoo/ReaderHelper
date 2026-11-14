@@ -231,13 +231,83 @@
     const b = e.target.closest(".toc-item");
     if (!b) return;
     setTocOpen(false);
-    spreadAnchor = null;
-    moved = true;
-    rendition?.display(tocItems[b.dataset.i].href);
+    jumpTo(tocItems[b.dataset.i].href);
   });
   // pointerdown, not mousedown: iPhone Safari sends no mouse events for taps on plain areas.
   document.addEventListener("pointerdown", (e) => {
     if (!els.tocMenu.hidden && !e.target.closest(".toc-wrap")) setTocOpen(false);
+  });
+
+  // ---------- jumping (progress slider, chapter menu) with "back to where you were" ----------
+
+  let backPos = null;  // {cfi, pct} of where you were reading before the first jump
+
+  function currentPct() {
+    const p = currentPercent();
+    return p == null ? null : Math.round(p * 100);
+  }
+
+  function jumpTo(target) {
+    // Remember the reading position only for the first jump, so several jumps still lead back to it.
+    if (!backPos && lastLocation?.start) backPos = { cfi: lastLocation.start.cfi, pct: currentPct() };
+    spreadAnchor = null;
+    moved = true;  // a real new position: saved and synced
+    rendition?.display(target);
+    showBack();
+  }
+
+  function showBack() {
+    $("backChip").hidden = !backPos;
+    if (backPos) $("backBtn").textContent = `↩ Back to ${backPos.pct != null ? `${backPos.pct} %` : "where you were"}`;
+  }
+  $("backBtn").addEventListener("click", () => {
+    if (!backPos) return;
+    const cfi = backPos.cfi;
+    backPos = null;
+    showBack();
+    moved = true;
+    spreadAnchor = null;
+    rendition?.display(cfi);
+  });
+  $("backClose").addEventListener("click", () => { backPos = null; showBack(); });
+
+  /** Chapter name for a spine index (the last table-of-contents entry starting at or before it). */
+  function chapterOfSpine(idx) {
+    let found = null;
+    for (const t of tocItems) if (t.spineIndex >= 0 && t.spineIndex <= idx && (!found || t.spineIndex >= found.spineIndex)) found = t;
+    return found?.label || "";
+  }
+
+  const seek = { panel: $("seekPanel"), range: $("seekRange"), btn: $("progressBtn") };
+  function setSeekOpen(open) {
+    seek.panel.hidden = !open;
+    seek.btn.setAttribute("aria-expanded", String(open));
+    if (!open) return;
+    const ready = !!book?.locations?.length();
+    seek.range.disabled = !ready;
+    $("seekNote").textContent = ready ? "Drag and let go to jump there." : "Calculating positions… try again in a moment.";
+    if (ready) {
+      seek.range.value = Math.round((currentPercent() ?? 0) * 1000);
+      previewSeek();
+      seek.range.focus();
+    }
+  }
+  function previewSeek() {
+    const p = seek.range.value / 1000;
+    $("seekPct").textContent = `${Math.round(p * 100)} %`;
+    let chapter = "";
+    try { chapter = chapterOfSpine(book.spine.get(book.locations.cfiFromPercentage(p))?.index ?? -1); } catch { /* none */ }
+    $("seekChapter").textContent = chapter;
+  }
+  seek.btn.addEventListener("click", () => setSeekOpen(seek.panel.hidden));
+  seek.range.addEventListener("input", previewSeek);
+  seek.range.addEventListener("change", () => {  // let go of the slider (or keyboard step)
+    const cfi = book.locations.cfiFromPercentage(seek.range.value / 1000);
+    if (cfi) jumpTo(cfi);
+  });
+  seek.panel.addEventListener("keydown", (e) => { if (e.key === "Escape" || e.key === "Enter") setSeekOpen(false); });
+  document.addEventListener("pointerdown", (e) => {
+    if (!seek.panel.hidden && !e.target.closest(".seek-wrap")) setSeekOpen(false);
   });
 
   // ---------- progress ----------
@@ -370,7 +440,7 @@
   // bottom line brings it back. Taps on the text itself stay word lookups.
   function setBars(show) {
     if (!PHONE.matches) show = true;
-    if (!show) setTocOpen(false);
+    if (!show) { setTocOpen(false); setSeekOpen(false); }
     document.body.classList.toggle("bars-hidden", !show);
   }
   const toggleBars = () => setBars(document.body.classList.contains("bars-hidden"));
