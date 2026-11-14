@@ -886,6 +886,8 @@ Duden (no public API). Only the German Wiktionary gives free German definitions.
 - *Tested:* 10 words (*Schlüssel, Band* ×2, *gehen, anfangen, schnell, Bank, obwohl, Haustürschlüssel, Laura*);
   `/lookup` with DE vs VI; `check_lemmas.py` unchanged.
   *Files:* `backend/grammar.py`, `backend/main.py`, `README.md`
+- Follow-up: words saved **without** the AI keep the definition as their note; its language was hard-coded
+  "en". `/lookup` now returns `definition_lang` ("de"/"en") and the reader saves with that.
 
 ## Where the app differs from the original spec (CLAUDE.md)
 
