@@ -926,6 +926,23 @@ for them, and the ranges didn't know which saved word they belong to.
   *Files:* `backend/nlp.py`, `backend/main.py`, `frontend/reader.js`, `frontend/style.css`,
   `tools/check_lemmas.py`, `README.md`
 
+### 58. Choose the meaning from "All senses"
+**Problem:** For the own combination *darauf bestehen* the popup showed "to succeed, to pass (an exam)" as the
+definition; the right one ("to insist [with auf …]") was only in the list, with no way to pick it.
+**Cause:** An expression without its own dictionary entry shows the tapped word's meanings, and those are not
+given to the model (it would mix up word and expression, #45) – so nothing chose among them and the first one
+was shown. The model can also simply choose wrong.
+**Fix:** the senses in **All senses** are clickable.
+- No AI answer yet: the clicked sense becomes the definition ("sense 4 of 4 (your choice)") and, when saving
+  without AI, the note.
+- With an AI answer: `/lookup` is called again with `sense` (and `refresh`); the server gives the model only
+  that meaning (`llm_senses = [picked]`), shows it as the definition, numbers it in the full list
+  (`sense_picked`), and caches the new answer, so the next tap on this word in this sentence gets it at once.
+*Tested:* API with the real model: *bestehen* + *darauf* → senses of *bestehen*, first shown → pick "to insist"
+→ definition = that sense (4 of 4, picked), translation "đòi hỏi" with a matching gloss → next lookup comes from
+the cache with the picked sense.
+*Files:* `backend/main.py`, `frontend/reader.js`, `frontend/style.css`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |

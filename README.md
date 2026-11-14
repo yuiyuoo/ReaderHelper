@@ -153,6 +153,9 @@ can open the app at all.
   Edit). **✨ Ask AI** adds the meaning in this sentence, an explanation and a translation of the whole
   sentence (15–25 s; the first time also loads the model). AI answers you already got come back instantly
   from the cache. **Selected text** (a phrase or sentences) always uses the AI (see below).
+  **Choose the meaning yourself:** open **All senses** and click the right one. Without an AI answer it becomes
+  the definition (and the note when you save); with an AI answer the AI is asked again for exactly that
+  meaning, and the new answer is remembered for this word in this sentence.
 - **Grammar (German words):** under the word the popover shows
   - nouns: article and plural, with the article coloured by gender (**der** blue, **die** red, **das** green):
     *der Schlüssel, die Schlüssel, des Schlüssels*. Words with several genders (*der/die/das Band*) use the
