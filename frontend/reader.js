@@ -32,6 +32,7 @@
   let lookupSeq = 0;            // guards against late responses
   let savedWords = new Set();   // lowercase spellings of saved words (fallback highlighting)
   let savedPhrases = new Set(); // saved entries of several words, highlighted by spelling
+  let savedInfo = new Map();    // lowercase base form / spelling -> saved entry (meaning shown on hover)
   let currentTarget = LABELS[store.get("target")] ? store.get("target") : "vi";
   let autoplay = store.get("autoplay") === "1";
   let fontPct = Math.min(FONT_MAX, Math.max(FONT_MIN, Number(store.get("fontSize")) || 100));
@@ -268,6 +269,7 @@
   }
 
   function onRelocated(loc) {
+    hideTip();
     lastLocation = loc;
     hideSelBtn();
     if (moved) savePosition(loc.start.cfi);
@@ -521,7 +523,68 @@
     doc.addEventListener("mouseup", () => setTimeout(() => onSelectionEnd(doc), 0));
     doc.addEventListener("touchend", () => setTimeout(() => onSelectionEnd(doc), 0));
     addSwipe(doc);
+    addHoverTip(doc);
     highlightSaved(contents);
+  }
+
+  // ---------- hover tip: saved meaning of a highlighted word (mouse only) ----------
+  // Highlights are CSS Highlight ranges, not elements, so there are no hover events for them: on mouse
+  // move, check whether the pointer is over one of the saved ranges (their screen rectangles).
+  const HOVER = window.matchMedia("(hover: hover) and (pointer: fine)");
+  const tip = document.createElement("div");
+  tip.className = "hover-tip";
+  tip.hidden = true;
+  tip.setAttribute("role", "tooltip");
+  document.body.appendChild(tip);
+  let tipRange = null, tipTimer = null;
+
+  function hideTip() {
+    clearTimeout(tipTimer);
+    tipRange = null;
+    tip.hidden = true;
+  }
+
+  function addHoverTip(doc) {
+    let pending = false;
+    doc.addEventListener("mousemove", (e) => {
+      if (!HOVER.matches || pending) return;
+      pending = true;
+      requestAnimationFrame(() => { pending = false; checkHover(doc, e.clientX, e.clientY); });
+    });
+    doc.addEventListener("mouseleave", hideTip);
+    doc.addEventListener("mousedown", hideTip);
+    doc.addEventListener("wheel", hideTip, { passive: true });
+  }
+
+  function checkHover(doc, x, y) {
+    if (!els.popover.hidden) return hideTip();  // the full popup is open
+    const hit = (doc.rhSaved || []).find((r) =>
+      [...r.getClientRects()].some((b) => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom));
+    if (hit === tipRange) return;
+    hideTip();
+    const v = hit && savedInfo.get(hit.rhKey);
+    if (!v) return;
+    tipRange = hit;
+    tipTimer = setTimeout(() => showTip(doc, hit, v), 350);  // short delay: no flicker when just passing
+  }
+
+  function showTip(doc, range, v) {
+    const short = (t, n) => (t.length > n ? t.slice(0, n - 1).replace(/\s+\S*$/, "") + "…" : t);
+    const meaning = v.translation_vi || short(v.gloss_vi || "", 90);
+    if (!meaning) return;
+    tip.innerHTML = `<b>${esc(meaning)}</b>` +
+      (v.translation_vi && v.gloss_vi ? `<span>${esc(short(v.gloss_vi, 90))}</span>` : "") +
+      (v.grammar ? `<small>${grammarHtml(v.grammar)}</small>` : "");
+    tip.hidden = false;
+    const frame = doc.defaultView.frameElement.getBoundingClientRect();
+    const b = range.getBoundingClientRect();
+    const w = tip.offsetWidth, h = tip.offsetHeight, m = 8;
+    let left = frame.left + b.left + b.width / 2 - w / 2;
+    left = Math.min(Math.max(m, left), window.innerWidth - w - m);
+    let top = frame.top + b.top - h - 6;                       // above the word …
+    if (top < m) top = frame.top + b.bottom + 6;               // … or below it near the top edge
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
   }
 
   /** Swipe left/right on a touch screen to turn pages. Only a quick, clearly horizontal movement counts,
@@ -1050,6 +1113,7 @@
 
   function closePopover() {
     addingTo = null;
+    hideTip();
     if (inflight) { inflight.abort(); inflight = null; }
     lookupSeq++;
     els.popover.hidden = true;
@@ -1115,6 +1179,10 @@
       // Phrases are matched by spelling; expressions with gaps ("stellte … in Frage") by the server.
       savedPhrases = new Set(items.filter((v) => v.word.trim().includes(" ") && !v.word.includes("…"))
         .map((v) => v.word.toLowerCase()));
+      savedInfo = new Map();
+      for (const v of items) {  // newest first: the latest saved meaning wins
+        for (const k of [v.lemma, v.word]) if (k && !savedInfo.has(k.toLowerCase())) savedInfo.set(k.toLowerCase(), v);
+      }
       els.vocabCount.textContent = items.length;
       els.vocabCount.hidden = items.length === 0;
     } catch { /* highlighting and the count are optional */ }
@@ -1127,7 +1195,7 @@
   async function highlightSaved(contents) {
     const win = contents.window, doc = contents.document;
     if (!win?.CSS?.highlights || !win.Highlight) return;
-    if (!markSaved || savedWords.size === 0) { win.CSS.highlights.delete("saved-word"); return; }
+    if (!markSaved || savedWords.size === 0) { win.CSS.highlights.delete("saved-word"); doc.rhSaved = []; return; }
     let ranges = spellingMatches(doc, savedPhrases);
     if (["en", "de"].includes(bookLang)) {
       try {
@@ -1140,6 +1208,7 @@
     }
     if (!doc.defaultView) return;  // the chapter was replaced meanwhile
     win.CSS.highlights.set("saved-word", new win.Highlight(...ranges));
+    doc.rhSaved = ranges;  // for the hover tip
   }
 
   /** Text of the book page, grouped by paragraph (block element), with where each text node starts. */
@@ -1175,10 +1244,11 @@
     const { spans } = await r.json();
     const ranges = [];
     spans.forEach((list, i) => {
-      for (const [s, e] of list) {
+      for (const [s, e, key] of list) {
         const range = doc.createRange();
         range.setStart(...pointIn(paras[i], s));
         range.setEnd(...pointIn(paras[i], e));
+        range.rhKey = key;  // saved base form = key into savedInfo
         ranges.push(range);
       }
     });
@@ -1201,6 +1271,7 @@
         const r = doc.createRange();
         r.setStart(n, start);
         r.setEnd(n, start + m[2].length);
+        r.rhKey = m[2].toLowerCase();  // spelling = key into savedInfo
         ranges.push(r);
         if (m[2].length === 0) re.lastIndex++;  // safety: never loop on an empty match
       }

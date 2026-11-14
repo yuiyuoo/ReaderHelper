@@ -490,3 +490,11 @@ body.two-pages .page-card::before { content: ""; position: absolute; top: 0; bot
 .note-save { font-size: 12px; min-height: 26px; padding: 0 8px; border-radius: 6px; vertical-align: middle; white-space: nowrap; }
 .note-save:disabled { color: var(--accent); border-color: transparent; background: var(--accent-soft); opacity: 1; }
 @media (max-width: 600px) { .note-save { min-height: 32px; padding: 0 10px; } }
+
+/* Hover tip over a saved (highlighted) word: its saved meaning, short. */
+.hover-tip { position: fixed; z-index: 1001; max-width: 300px; padding: 7px 10px; border-radius: 8px;
+  background: var(--text); color: var(--bg); font-size: 13px; line-height: 1.35; pointer-events: none;
+  box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 2px; }
+.hover-tip span { opacity: .85; }
+.hover-tip small { opacity: .8; font-size: 12px; }
+.hover-tip .art { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
