@@ -748,18 +748,18 @@
         ? sentenceAt({ node, offset: range.startOffset, word: phrase })
         : phrase;
       // The whole (short) sentence selected, e.g. "Er ging nach Hause.": translate it as a sentence.
-      if (words.length > 1 && trim(context) === phrase) return translatePassage(text, anchor);
+      if (words.length > 1 && trim(context) === phrase) return translatePassage(text, anchor, false, false, cfi);
       lookup(phrase, context.includes(phrase) ? context : phrase, anchor, { cfi, ask: true });
     } else {
-      translatePassage(text, anchor);
+      translatePassage(text, anchor, false, false, cfi);
     }
   }
 
-  async function translatePassage(text, anchor, refresh = false, ask = false) {
+  async function translatePassage(text, anchor, refresh = false, ask = false, cfi = "") {
     if (inflight) inflight.abort();
     const ctrl = (inflight = new AbortController());
     const seq = ++lookupSeq;
-    const state = { text, anchor, lang: ["en", "de"].includes(bookLang) ? bookLang : null, data: null };
+    const state = { text, anchor, cfi, lang: ["en", "de"].includes(bookLang) ? bookLang : null, data: null };
 
     if (text.length > MAX_PASSAGE_CHARS) {
       state.error = `The selection is too long (${text.length} characters). ` +
@@ -812,7 +812,10 @@
       }
       if (d.notes?.length) {
         html += `<div class="section"><div class="label">${esc(L.notes)}</div><ul class="notes">` +
-          d.notes.map((n) => `<li><b>${esc(n.term)}</b>: ${esc(n.explanation_vi)}</li>`).join("") + `</ul></div>`;
+          d.notes.map((n, i) => `<li><span><b>${esc(n.term)}</b>: ${esc(n.explanation_vi)}</span>
+            <button type="button" class="note-save" data-act="save-note" data-i="${i}"
+              title="Save “${esc(n.term)}” with this explanation to your words">+ Save</button></li>`).join("") +
+          `</ul></div>`;
       }
       if (d.warning) html += `<div class="section warning">${esc(d.warning)}</div>`;
       html += `<div class="actions">
@@ -826,9 +829,46 @@
       const act = ev.target.closest("[data-act]")?.dataset.act;
       if (act === "close") closePopover();
       if (act === "speak") speak(state.text, state.lang || "en");
-      if (act === "retry") translatePassage(state.text, state.anchor, true, true);
-      if (act === "ask") translatePassage(state.text, state.anchor, false, true);
+      if (act === "retry") translatePassage(state.text, state.anchor, true, true, state.cfi);
+      if (act === "ask") translatePassage(state.text, state.anchor, false, true, state.cfi);
+      if (act === "save-note") saveNote(state, Number(ev.target.closest("[data-i]").dataset.i), ev.target.closest("button"));
     };
+  }
+
+  /** Save one note of a passage translation ("milderte: làm dịu") as a word. The quick dictionary step
+   *  supplies base form, the sentence it stands in and the grammar; the note's explanation is the meaning,
+   *  so the AI isn't asked again. */
+  async function saveNote(state, i, btn) {
+    const n = state.data?.notes?.[i];
+    if (!n || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    try {
+      const r = await fetch("/lookup", {
+        method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ word: n.term, sentence: state.text, lang_hint: bookLang || null, quick: true,
+                               target: state.data.target_lang || target(), single: true }),
+      });
+      const w = await r.json();
+      if (!r.ok) throw new Error();
+      const oneSentence = w.sentence === state.text.replace(/\s+/g, " ").trim();
+      const saved = await fetch("/api/vocab", {
+        method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify({
+          lang: w.lang, word: n.term, lemma: w.lemma, sentence: w.sentence,
+          translation_vi: n.explanation_vi, gloss_vi: "", target_lang: state.data.target_lang || target(),
+          sentence_tr: oneSentence ? state.data.translation_vi : "",  // only if the passage is that sentence
+          book_id: currentBookId, cfi: state.cfi || "", grammar: w.grammar?.text || "",
+        }),
+      });
+      if (!saved.ok) throw new Error();
+      btn.textContent = "Saved ✓";
+      await loadSavedWords();
+      rendition?.getContents().forEach(highlightSaved);
+    } catch {
+      btn.disabled = false;
+      btn.textContent = "Retry";
+    }
   }
 
   // ---------- lookup + popover ----------
