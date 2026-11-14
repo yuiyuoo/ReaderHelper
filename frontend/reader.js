@@ -832,9 +832,6 @@
       html += `<div class="expr-note">${esc(how)} · in this sentence: <b>${esc(ex.words)}</b>
         <button class="link-btn" data-act="single" title="Look up only the word you tapped">Just “${esc(state.word)}”</button></div>`;
     }
-    if (addingTo === state) {
-      html += `<div class="section adding">Tap another word of this sentence to add it… <button class="link-btn" data-act="cancel-add">Cancel</button></div>`;
-    }
 
     if (phase === "loading") {
       html += `<div class="section loading"><span class="spinner"></span>Looking up…</div>`;
@@ -880,6 +877,15 @@
           ${d.cached ? '<span class="sense">cached</span>' : ""}</div>`;
       }
     }
+    // "+ Add word": only a slim bar, so the sentence stays visible for tapping the next word
+    // (the full popup – on phones a sheet up to 70% of the screen – covered it).
+    const adding = addingTo === state;
+    if (adding) {
+      html = `<div class="adding-bar"><span>Tap another word of this sentence to add it to
+        <b>${esc(ex ? ex.words : state.word)}</b></span>
+        <button type="button" data-act="cancel-add">Cancel</button></div>`;
+    }
+    els.popover.classList.toggle("compact", adding);
     els.popover.classList.remove("wide");
     els.popover.innerHTML = html;
     els.popover.hidden = false;
@@ -893,7 +899,7 @@
       if (act === "retry") lookup(state.word, state.sentence, state.anchor, { ...again, refresh: true, ask: true });
       if (act === "ask") lookup(state.word, state.sentence, state.anchor, { ...again, ask: true });
       if (act === "single") lookup(state.word, state.sentence, state.anchor, { cfi: state.cfi, single: true, ask: state.ask });
-      if (act === "add") { addingTo = state; renderPopover(state, phase); }
+      if (act === "add") { addingTo = state; renderPopover(state, phase); flashWord(state.cfi); }
       if (act === "cancel-add") { addingTo = null; renderPopover(state, phase); }
     };
   }

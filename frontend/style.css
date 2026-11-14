@@ -120,7 +120,6 @@ select { max-width: 260px; }
 .popover .expr-note { margin-top: 6px; font-size: 13px; color: var(--muted); }
 .popover .expr-note b { color: var(--text); font-weight: 600; }
 .popover .expr-note .link-btn { display: inline; padding: 0 0 0 6px; font-size: 13px; }
-.popover .adding { background: var(--accent-soft); color: var(--accent); padding: 6px 8px; border-radius: 6px; font-size: 13px; }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -473,3 +472,14 @@ body.two-pages .page-card::before { content: ""; position: absolute; top: 0; bot
 }
 @media (max-width: 600px) and (prefers-reduced-motion: reduce) { body.reading .read-bar { transition: none; } }
 .read-left .profile-chip { margin-left: auto; flex: none; }
+
+/* "+ Add word": the popup shrinks to one line so the sentence stays visible. */
+.popover.compact { padding: 10px 12px 10px 14px; }
+.adding-bar { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+.adding-bar span { flex: 1; min-width: 0; }
+.adding-bar button { flex: none; min-height: 36px; padding: 0 14px; border-radius: 8px; }
+@media (max-width: 600px) {
+  .popover.compact { max-height: none; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .popover.compact::before { display: none; }
+  .adding-bar button { min-height: 44px; }
+}
