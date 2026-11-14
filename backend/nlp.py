@@ -197,8 +197,9 @@ _PARA_CACHE: dict[tuple[str, str], tuple[list, list]] = {}
 _PARA_CACHE_MAX = 20000
 
 
-def find_lemmas(lang: str, paragraphs: list[str], lemmas: set[str]) -> list[list[list[int]]]:
-    """For each paragraph, [start, end] character spans of saved words:
+def find_lemmas(lang: str, paragraphs: list[str], lemmas: set[str]) -> list[list[list]]:
+    """For each paragraph, [start, end, saved base form] spans of saved words (the base form lets the reader
+    show the saved meaning on hover):
     - single words whose lemma is in `lemmas` (case-insensitive). For a separable verb both parts count
       ("fing" and "an" of anfangen);
     - noun-verb expressions in `lemmas` ("in Frage stellen"): all their parts, in any form and order
@@ -206,7 +207,7 @@ def find_lemmas(lang: str, paragraphs: list[str], lemmas: set[str]) -> list[list
     from . import expressions  # imported here: expressions itself uses this module
 
     singles = {l.lower() for l in lemmas if " " not in l.strip()}
-    multi = {expressions.key_of(l.split()) for l in lemmas if " " in l.strip()}
+    multi = {expressions.key_of(l.split()): l for l in lemmas if " " in l.strip()}
     todo = [p for p in dict.fromkeys(paragraphs) if (lang, p) not in _PARA_CACHE]
     if todo:
         for text, doc in zip(todo, get_nlp(lang).pipe(todo, batch_size=64)):
@@ -219,10 +220,10 @@ def find_lemmas(lang: str, paragraphs: list[str], lemmas: set[str]) -> list[list
     out = []
     for p in paragraphs:
         tokens, exprs = _PARA_CACHE[(lang, p)]
-        spans = [[s, e] for s, e, lem in tokens if lem in singles]
+        spans = [[s, e, lem] for s, e, lem in tokens if lem in singles]
         for key, parts in exprs:
             if key in multi:
-                spans += parts
+                spans += [[s, e, multi[key].lower()] for s, e in parts]
         out.append(spans)
     return out
 

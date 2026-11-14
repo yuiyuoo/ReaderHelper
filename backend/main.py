@@ -503,7 +503,7 @@ async def highlights(q: HighlightIn, user: int = Depends(current_user)):
     """Where in these paragraphs do saved words occur? Matched by base form with the same analysis as a
     clicked word, so a saved "fangen" marks "fing"/"fängt" but not "fing … an" (anfangen).
     Saved noun-verb expressions ("in Frage stellen") are found with all their parts.
-    Returns, per paragraph, [start, end] character spans. Other phrases (several words next to each other,
+    Returns, per paragraph, [start, end, base form] spans. Other phrases (several words next to each other,
     "zu Hause") are matched in the browser by their spelling."""
     if sum(map(len, q.paragraphs)) > 1_000_000:
         raise HTTPException(400, "Too much text at once.")

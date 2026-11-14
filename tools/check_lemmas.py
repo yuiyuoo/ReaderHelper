@@ -69,7 +69,7 @@ print(f"\n{ok}/{len(cases)} correct")
 paras = ["Die Katze fing die Maus.", "Dann fing das Mädchen an zu weinen.", "Mach die Tür zu!", "Er machte das Fenster auf."]
 for saved in ({"fangen"}, {"anfangen"}, {"zumachen"}, {"machen"}):
     spans = nlp.find_lemmas("de", paras, saved)
-    print(sorted(saved), [[p[a:b] for a, b in sp] for p, sp in zip(paras, spans)])
+    print(sorted(saved), [[p[a:b] for a, b, *_ in sp] for p, sp in zip(paras, spans)])
 
 # ---- noun-verb expressions ("in Frage stellen") ----
 from backend import expressions  # noqa: E402
@@ -97,4 +97,4 @@ print(f"\n{ok}/{len(expr_cases)} expressions correct")
 paras = ["Er stellte die Entscheidung gestern in Frage.", "Das wurde in Frage gestellt.", "Er stellte eine Frage."]
 for saved in ({"in Frage stellen"}, {"eine Frage stellen"}):
     spans = nlp.find_lemmas("de", paras, saved)
-    print(sorted(saved), [[p[a:b] for a, b in sp] for p, sp in zip(paras, spans)])
+    print(sorted(saved), [[p[a:b] for a, b, *_ in sp] for p, sp in zip(paras, spans)])
