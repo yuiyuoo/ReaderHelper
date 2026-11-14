@@ -98,3 +98,22 @@ paras = ["Er stellte die Entscheidung gestern in Frage.", "Das wurde in Frage ge
 for saved in ({"in Frage stellen"}, {"eine Frage stellen"}):
     spans = nlp.find_lemmas("de", paras, saved)
     print(sorted(saved), [[p[a:b] for a, b, *_ in sp] for p, sp in zip(paras, spans)])
+
+# Own combinations ("+ Add word") and phrases: all words' base forms close together in one sentence,
+# reflexive pronouns count as "sich" and are marked too (#59).
+combo_cases = [
+    ("darauf bestehen", "Sie bestand darauf, dass alle kommen.", ["bestand", "darauf"]),
+    ("sich reissen", "Laura riss sich die Kopfhörer vom Kopf.", ["riss", "sich"]),
+    ("sich wälzen", "Ich wälzte mich hin und her.", ["wälzte", "mich"]),
+    ("zog die Vorhänge zu", "Sie zog schnell die schweren Vorhänge zu.", ["zog", "Vorhänge", "zu"]),
+    ("halbherzig erwiderte", "Sie erwiderte halbherzig.", ["erwiderte", "halbherzig"]),
+    ("darauf bestehen", "Er bestand die Prüfung und freute sich darauf.", []),
+    ("sich wälzen", "Er wäscht sich die Hände.", []),
+]
+ok = 0
+for saved, s, exp in combo_cases:
+    got = [s[a:b] for a, b, *_ in nlp.find_lemmas("de", [s], {saved})[0]]
+    hit = got == exp
+    ok += hit
+    print(f"{'OK ' if hit else 'XX '} {saved:22} -> {got!s:32} | {s}")
+print(f"\n{ok}/{len(combo_cases)} combinations correct")

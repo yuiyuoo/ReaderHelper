@@ -197,34 +197,100 @@ _PARA_CACHE: dict[tuple[str, str], tuple[list, list]] = {}
 _PARA_CACHE_MAX = 20000
 
 
+def _norm_lemma(lemma: str) -> str:
+    return lemma.lower().replace("ß", "ss")  # "reissen" (old spelling) = "reißen"
+
+
+def _hl_lemma(lang: str, tok) -> str:
+    """Base form used for highlighting. German reflexive pronouns (mich, dich, sich, uns, euch) all count as
+    "sich", so a saved "sich wälzen" also marks "ich wälzte mich" – including the pronoun."""
+    if lang == "de" and tok.tag_ == "PRF":
+        return "sich"
+    return _norm_lemma(token_lemma(lang, tok)[0])
+
+
+@lru_cache(maxsize=2000)
+def _signature(lang: str, phrase: str) -> frozenset[str]:
+    """Base forms of a saved multi-word entry's words, without articles: "darauf bestehen" ->
+    {darauf, bestehen}, "zog die Vorhänge zu" -> {zuziehen, vorhang} (the separable verb counts once),
+    "sich reißen" -> {sich, reissen} ("sich" is kept here, so it gets marked too)."""
+    from . import expressions
+    doc = get_nlp(lang)(phrase)
+    return frozenset(_hl_lemma(lang, t) for t in doc
+                     if t.is_alpha and (t.text.lower() == "sich" or t.text.lower() not in expressions.ARTICLES))
+
+
+def _near_matches(tokens: list, sig: frozenset[str]) -> list[list[int]]:
+    """Spans of tokens of one paragraph that together contain every base form of `sig`, in the same
+    sentence and close together (at most len(sig) + 3 tokens from first to last), in any order and form.
+    The window keeps "in Frage stellen" from matching "In der Pause wollte er eine Frage stellen"."""
+    limit = len(sig) + 3
+    spans = []
+
+    def fits(window) -> bool:
+        # A noun that stands with a preposition in the text ("in Frage") only counts if the saved entry has
+        # that preposition too: a saved "eine Frage stellen" must not mark "stellte … in Frage".
+        return all(not t[5] or t[5] in sig for t in window)
+    by_sent: dict[int, list] = {}
+    for t in tokens:
+        if t[2] in sig:
+            by_sent.setdefault(t[3], []).append(t)
+    for hits in by_sent.values():
+        for a in range(len(hits)):
+            seen, b = set(), a
+            while b < len(hits) and hits[b][4] - hits[a][4] <= limit:
+                seen.add(hits[b][2])
+                if seen == sig:
+                    if fits(hits[a:b + 1]):
+                        spans += [[t[0], t[1]] for t in hits[a:b + 1]]
+                    break
+                b += 1
+    return spans
+
+
 def find_lemmas(lang: str, paragraphs: list[str], lemmas: set[str]) -> list[list[list]]:
     """For each paragraph, [start, end, saved base form] spans of saved words (the base form lets the reader
     show the saved meaning on hover):
     - single words whose lemma is in `lemmas` (case-insensitive). For a separable verb both parts count
       ("fing" and "an" of anfangen);
     - noun-verb expressions in `lemmas` ("in Frage stellen"): all their parts, in any form and order
-      ("stellte … in Frage")."""
+      ("stellte … in Frage");
+    - any other saved combination ("darauf bestehen", "sich reißen", "zog die Vorhänge zu"): all its words'
+      base forms close together in one sentence (_near_matches)."""
     from . import expressions  # imported here: expressions itself uses this module
 
-    singles = {l.lower() for l in lemmas if " " not in l.strip()}
+    singles = {_norm_lemma(l): l.lower() for l in lemmas if " " not in l.strip()}
     multi = {expressions.key_of(l.split()): l for l in lemmas if " " in l.strip()}
+    sigs = []  # (signature, saved form) of multi-word entries
+    for l in multi.values():
+        sig = _signature(lang, l)
+        if len(sig) == 1:      # e.g. "nickte zu" = one separable verb (zunicken): match like a single word
+            singles.setdefault(next(iter(sig)), l.lower())
+        elif sig:
+            sigs.append((sig, l.lower()))
     todo = [p for p in dict.fromkeys(paragraphs) if (lang, p) not in _PARA_CACHE]
     if todo:
         for text, doc in zip(todo, get_nlp(lang).pipe(todo, batch_size=64)):
             if len(_PARA_CACHE) >= _PARA_CACHE_MAX:
                 _PARA_CACHE.clear()  # simple bound; it refills from what is being read
             _PARA_CACHE[(lang, text)] = (
-                [(t.idx, t.idx + len(t.text), token_lemma(lang, t)[0].lower()) for t in doc if t.is_alpha],
+                # (start, end, base form, sentence, token index, preposition a noun stands with or "")
+                [(t.idx, t.idx + len(t.text), _hl_lemma(lang, t), t.sent.start, t.i,
+                  t.head.text.lower() if t.pos_ in ("NOUN", "PROPN") and t.head.pos_ == "ADP" else "")
+                 for t in doc if t.is_alpha],
                 expressions.all_in(lang, doc),
             )
     out = []
     for p in paragraphs:
         tokens, exprs = _PARA_CACHE[(lang, p)]
-        spans = [[s, e, lem] for s, e, lem in tokens if lem in singles]
+        spans = [[t[0], t[1], singles[t[2]]] for t in tokens if t[2] in singles]
         for key, parts in exprs:
             if key in multi:
                 spans += [[s, e, multi[key].lower()] for s, e in parts]
-        out.append(spans)
+        for sig, saved in sigs:
+            spans += [[s, e, saved] for s, e in _near_matches(tokens, sig)]
+        seen = set()  # a word can be found by several rules: keep it once
+        out.append([sp for sp in spans if (sp[0], sp[1]) not in seen and not seen.add((sp[0], sp[1]))])
     return out
 
 
