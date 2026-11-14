@@ -174,6 +174,9 @@ can open the app at all.
 - **Meaning in:** the selector in the toolbar sets the language of meanings and translations: Tiếng Việt
   (default), English or Deutsch. If it matches the book's language (e.g. a German book with meanings in
   Deutsch), you get a simpler synonym and an explanation in simple language instead of a translation.
+  With **DE** and a German word, the dictionary definitions are German too (from the German Wiktionary, e.g.
+  *anfangen*: "trans.: etwas beginnen"), without the AI; with VI/EN they stay English. Fixed expressions keep
+  English definitions (the German Wiktionary has few entries for them).
   The setting is remembered. Saved words show their meaning language in the Notes column.
 - **Translate a selection:** select text with the mouse (or Shift + arrow keys), then press the
   **Dịch · Translate** button that appears.

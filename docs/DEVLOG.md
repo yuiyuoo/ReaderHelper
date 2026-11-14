@@ -865,6 +865,28 @@ punctuation at the ends) goes to `/translate` as a passage. Tapped single words 
 AI); *Jetzt sind wir da.* → `/translate`.
 *Files:* `frontend/reader.js`, `README.md`
 
+### 55. German definitions for German words (meaning language DE)
+**Problem:** With meanings in German, German words still got English dictionary definitions; German ones
+came only from the AI.
+**Options looked at:** German Wiktionary (free, no key), kaikki.org (Wiktionary as JSON download), DWDS
+(small APIs, definitions only on the website), OpenThesaurus (synonyms), Leipzig Wortschatz (examples),
+Duden (no public API). Only the German Wiktionary gives free German definitions.
+**Fix:**
+- `grammar._parse()` now makes one entry per part-of-speech heading and also reads its `{{Bedeutungen}}`
+  block (`:[1] …` lines; `::[1a]` sub-senses skipped; group labels like `*{{K|intrans.}}` are put in front).
+  Same page and cache as the grammar line (#49), so no extra request. Markup cleanup: `{{K|intrans.|zeitlich}}`
+  → "intrans., zeitlich:", `[[Schloss]]es` → "Schlosses", comments/refs/italics removed.
+- `german_senses()`: entries of the word class spaCy found (mapping to Wortart names: Substantiv, Verb,
+  Subjunktion, …), gender picks among homonyms (*die Band* group / *der Band* volume), surname entries are
+  dropped for ordinary nouns; at most 5, breadth-first like the English ones.
+- `/lookup` (`_senses`): German word + target DE → German definitions, else (or if none) English as before.
+  The AI gets the German senses then, too.
+- Not for expressions: the German Wiktionary has few such pages (*in Frage stellen* 404, *infrage stellen*
+  exists).
+- *Tested:* 10 words (*Schlüssel, Band* ×2, *gehen, anfangen, schnell, Bank, obwohl, Haustürschlüssel, Laura*);
+  `/lookup` with DE vs VI; `check_lemmas.py` unchanged.
+  *Files:* `backend/grammar.py`, `backend/main.py`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
