@@ -150,7 +150,9 @@ can open the app at all.
 - **Dark mode:** the sun/moon button on every page. Without a choice, the app follows your system setting.
   The book's own colours are overridden in dark mode so the text is always readable.
 - **Navigation:** use the ‹ › buttons, the ← → keys, or the Contents menu.
-- **Look up a word:** click it. Close the popover with Esc or by clicking outside it.
+- **Look up a word:** click it. Close the popover with Esc or by clicking outside it. The popup leaves the
+  text after the word visible, so you can read on while the AI answers: on a PC it opens above the word (below
+  only near the top of the page); on a phone it slides in from the top when the word is in the lower half.
   You get the base form, pronunciation and dictionary meanings right away (about 1–2 s) and can **Save
   word** straight away (the English dictionary meaning becomes the note; add a Vietnamese one later with
   Edit). **✨ Ask AI** adds the meaning in this sentence, an explanation and a translation of the whole

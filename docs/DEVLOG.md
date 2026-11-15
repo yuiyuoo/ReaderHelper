@@ -998,6 +998,19 @@ all offsets back to the original text, so the browser's ranges stay right.
 click → 37 %, chip gone.
 *Files:* `frontend/index.html`, `frontend/reader.js`, `frontend/style.css`, `README.md`
 
+### 62. The popup covered the text you'd read next
+**Problem:** The popup opened below the word (on phones: a sheet from the bottom), exactly over the lines you
+read next – so you couldn't read on during the 15–25 s the AI takes.
+**Fix** (`positionPopover`):
+- PC: above the word, positioned by its *bottom* edge (`bottom = viewport − word top`), so it grows upwards when
+  the AI answer arrives instead of sliding over the word; below the word only if there is clearly less room
+  above (word near the top). `max-height` = the room on that side.
+- Phone: word in the lower half → a sheet from the top (`sheet-top`) ending just above the word; upper half → the
+  sheet from the bottom as before, but at most down to ~2 lines below the word (at least 38 % of the screen).
+*Tested:* headless Edge, PC 1280×860 and phone 390×844, a word at 15 % and at 75 % of the height: PC below/above,
+phone bottom/top sheet; in all four cases the popup doesn't cover the word.
+*Files:* `frontend/reader.js`, `frontend/style.css`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
