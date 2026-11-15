@@ -1191,15 +1191,33 @@
   const PHONE = window.matchMedia("(max-width: 600px)");
   PHONE.addEventListener("change", () => setBars(true));
 
+  /** Place the popup so that the text *after* the word stays visible – you can read on while the AI answers.
+   *  PC: above the word, anchored by its bottom edge (it grows upwards when the answer arrives); below only
+   *  when the word is near the top. Phone: a sheet from the top ending above the word when the word is in the
+   *  lower half, else from the bottom, leaving the word's line and the next lines free. */
   function positionPopover(a) {
-    const p = els.popover, m = 8;
-    if (PHONE.matches) { p.style.left = p.style.top = ""; return; }
-    const w = p.offsetWidth, h = p.offsetHeight;
-    let left = Math.min(Math.max(m, a.left), window.innerWidth - w - m);
-    let top = a.bottom + m;
-    if (top + h > window.innerHeight - m) top = Math.max(m, a.top - h - m);
-    p.style.left = `${left}px`;
-    p.style.top = `${top}px`;
+    const p = els.popover, m = 8, vh = window.innerHeight;
+    p.style.top = p.style.bottom = p.style.maxHeight = "";
+    if (PHONE.matches) {
+      p.style.left = "";
+      const fromTop = (a.top + a.bottom) / 2 > vh * 0.45;
+      p.classList.toggle("sheet-top", fromTop);
+      const room = fromTop ? a.top - 12 : vh - a.bottom - 64;  // bottom sheet: keep ~2 lines after the word
+      p.style.maxHeight = `${Math.round(Math.min(vh * 0.7, Math.max(vh * 0.38, room)))}px`;
+      return;
+    }
+    p.classList.remove("sheet-top");
+    const w = p.offsetWidth;
+    p.style.left = `${Math.min(Math.max(m, a.left), window.innerWidth - w - m)}px`;
+    const above = a.top - 2 * m, below = vh - a.bottom - 2 * m;
+    if (above >= 260 || above > below) {
+      p.style.top = "auto";
+      p.style.bottom = `${vh - a.top + m}px`;
+      p.style.maxHeight = `${Math.min(vh * 0.7, above)}px`;
+    } else {
+      p.style.top = `${a.bottom + m}px`;
+      p.style.maxHeight = `${Math.min(vh * 0.7, below)}px`;
+    }
   }
 
   function closePopover() {

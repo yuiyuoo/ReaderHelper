@@ -524,3 +524,14 @@ button.progress:hover { background: var(--hover); color: var(--text); }
   top: calc(env(safe-area-inset-top) + 100px); } }
 .progress-track { display: inline-block; }
 .progress-fill { display: block; }
+
+/* Phone: the word sheet from the top when the tapped word is in the lower half (see positionPopover). */
+@media (max-width: 600px) {
+  .popover.sheet-top, .popover.wide.sheet-top { top: 0 !important; bottom: auto;
+    border-radius: 0 0 16px 16px; border-top: 0; border-bottom: 1px solid var(--border);
+    padding: calc(14px + env(safe-area-inset-top)) 18px 18px; box-shadow: 0 10px 32px rgba(0,0,0,.18);
+    animation: sheet-down .18s ease-out; }
+  .popover.sheet-top::before { display: none; }
+  .popover.sheet-top .actions { bottom: -18px; margin-bottom: -18px; padding-bottom: 10px; }
+}
+@keyframes sheet-down { from { transform: translateY(-100%); } to { transform: none; } }
