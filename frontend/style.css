@@ -539,3 +539,24 @@ button.progress:hover { background: var(--hover); color: var(--text); }
 /* Popup: word already saved ("★ Saved", click to remove) */
 .popover .actions button.saved { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .popover .actions button.danger { color: var(--danger); border-color: var(--danger-border); }
+
+/* Word class + pronunciation under the word; German meanings */
+.popover .wordinfo { display: flex; align-items: baseline; gap: 10px; margin: -4px 0 6px; font-size: 13px; color: var(--muted); }
+.popover .wordinfo .pos { font-style: italic; }
+.popover .wordinfo .ipa { font-family: "Noto Sans", "Segoe UI", system-ui, sans-serif; letter-spacing: .02em; }
+.popover .def-de { margin: 2px 0 0; font-size: 14px; }
+.popover ol.def-de { padding-left: 20px; }
+.popover ol.def-de li { margin: 1px 0; }
+/* Long words ("Kopfschmerzen ← Kopfschmerz"): the header wraps instead of pushing × out of the popup. */
+.popover { overflow-x: hidden; }
+.popover .head { flex-wrap: wrap; row-gap: 2px; }
+.popover .head .word { min-width: 0; overflow-wrap: anywhere; }
+.popover .head .lemma { white-space: nowrap; }
+.popover .head .close { flex: none; }
+.popover .wordinfo { flex-wrap: wrap; }
+/* × always in the top right corner, whatever wraps in the header */
+.popover .head { padding-right: 34px; }
+.popover .head .close { position: absolute; top: 8px; right: 8px; margin: 0; }
+@media (max-width: 600px) { .popover .head { padding-right: 46px; } .popover .head .close { top: 10px; right: 10px; } }
+@media (max-width: 600px) { .popover.sheet-top .head .close { top: calc(8px + env(safe-area-inset-top)); } }
+.popover .wordinfo { margin: 4px 0 6px; }

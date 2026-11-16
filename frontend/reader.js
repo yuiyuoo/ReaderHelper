@@ -1085,6 +1085,11 @@
       <button class="icon" data-act="speak" title="Pronounce">🔊</button>
       <button class="close" data-act="close" title="Close (Esc)">×</button>
     </div>`;
+    // Word class and pronunciation (IPA of the base form): "Adjektiv · /ˈɡlʏklɪç/".
+    if (d && (d.pos_label || d.ipa)) {
+      html += `<div class="wordinfo">${d.pos_label ? `<span class="pos">${esc(d.pos_label)}</span>` : ""}` +
+        `${d.ipa ? `<span class="ipa" title="Pronunciation of “${esc(d.lemma)}” (IPA)">/${esc(d.ipa)}/</span>` : ""}</div>`;
+    }
     const g = d?.grammar;
     if (g) {
       html += `<div class="grammar"${g.guess ? ' title="Gender read from the sentence; no dictionary table for this word"' : ""}>
@@ -1102,6 +1107,12 @@
     } else if (phase === "error") {
       html += `<div class="section error">${esc(state.error)}</div>`;
     } else {
+      // German meanings of a German word (meaning language VI/EN; with DE they are the main definition below).
+      if (d.definition_de?.length) {
+        html += `<div class="section"><div class="label">Deutsch</div>` + (d.definition_de.length === 1
+          ? `<div class="def-de">${esc(d.definition_de[0])}</div>`
+          : `<ol class="def-de">${d.definition_de.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>`) + `</div>`;
+      }
       // "partial": dictionary is here, the model's answer is still coming.
       if (phase === "partial") {
         html += `<div class="section loading"><span class="spinner"></span>Finding the meaning in this sentence…</div>`;
