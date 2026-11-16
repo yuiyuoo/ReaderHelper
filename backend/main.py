@@ -272,6 +272,29 @@ async def _senses(lang: str, lemma: str, word: str, pos: str, gender: str, targe
     return (*await nlp.fetch_senses(lang, lemma, word, pos), "en")
 
 
+async def _word_extras(lang: str, lemma: str, word: str, pos: str, gender: str, target: str, is_expr: bool) -> dict:
+    """grammar (German grammar line), pos_label ("Adjektiv"/"adjective"), ipa ("ˈɡlʏklɪç"), definition_de
+    (up to 3 German meanings – only when the meaning language isn't German; then the main definitions are
+    German already). Never raises; empty values when unknown."""
+    out = {"grammar": None, "pos_label": "", "ipa": "", "definition_de": []}
+    if is_expr:
+        return out
+    try:
+        out["pos_label"] = nlp.POS_LABELS.get(lang, {}).get(pos, "")
+        if lang == "de":
+            out["grammar"] = await grammar.grammar_of(lang, lemma, pos, gender)  # fetches the page …
+            info = await grammar.german_info(lemma, pos, gender)                  # … this reads it from memory
+            out["pos_label"] = info["wortart"] or out["pos_label"]
+            out["ipa"] = info["ipa"]
+            if target != "de":
+                out["definition_de"] = info["senses"]
+        elif lang == "en":
+            out["ipa"] = await nlp.english_ipa(lemma, word, pos)
+    except Exception:  # extras must never break a lookup
+        log.exception("word extras failed")
+    return out
+
+
 @app.post("/lookup")
 async def lookup(q: LookupIn):
     word = q.word.strip()
@@ -289,14 +312,14 @@ async def lookup(q: LookupIn):
     word_lemma = lemma  # base form of the tapped word itself
     if expr:
         lemma = expr["display"]
-    # Article/plural, verb forms, comparison (German): fetched alongside the rest, not part of the AI cache.
-    grammar_task = asyncio.create_task(grammar.grammar_of(lang, word_lemma, pos, gender) if not expr
-                                       else asyncio.sleep(0, None))
+    # Grammar line, word class, pronunciation, German meanings: fetched alongside the rest, not part of the
+    # AI cache (so answers cached before these existed get them too).
+    extras_task = asyncio.create_task(_word_extras(lang, word_lemma, word, pos, gender, q.target, bool(expr)))
 
     variant = llm.cache_variant(q.target)
     cached = None if q.refresh else db.get_cached(lang, lemma, sentence, variant)
     if cached:
-        return {**cached, "word": word, "grammar": await grammar_task, "cached": True}
+        return {**cached, "word": word, **await extras_task, "cached": True}
 
     # Dictionary first: the model chooses among its numbered senses (more reliable than letting a
     # small model guess). A failure in either step doesn't affect the other.
@@ -327,7 +350,7 @@ async def lookup(q: LookupIn):
         "definition_note": dict_err, "target_lang": q.target,
         "definition_lang": definition_lang,  # "de" for German definitions (#55), else "en"
         "expression": {k: expr[k] for k in ("display", "words", "source")} if expr else None,
-        "definition_of": definition_of, "grammar": await grammar_task,
+        "definition_of": definition_of, **await extras_task,
     }
     if q.quick:
         # Step 1 of two: show this at once; the client then asks again without `quick` for the model's

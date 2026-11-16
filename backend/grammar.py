@@ -54,7 +54,7 @@ def _parse(text: str) -> list[dict] | None:
         line = lines[i]
         if line.startswith("=== "):
             kinds = re.findall(r"\{\{Wortart\|([^|}]+)\|Deutsch\}\}", line)
-            cur = {"type": kinds[0] if kinds else "", "kinds": kinds, "params": {}, "senses": [],
+            cur = {"type": kinds[0] if kinds else "", "kinds": kinds, "params": {}, "senses": [], "ipa": "",
                    "irregular": bool(re.search(r"unregelmäßig|\{\{unreg\.\}\}", line))}
             entries.append(cur)
             in_meanings, group = False, ""
@@ -67,6 +67,9 @@ def _parse(text: str) -> list[dict] | None:
                     cur["params"][p.group(1).strip()] = _clean(p.group(2))
                 i += 1
             cur["type"] = t.group(1)
+        elif line.startswith(":{{IPA}}") and not cur["ipa"]:   # pronunciation: ":{{IPA}} {{Lautschrift|ˈɡlʏklɪç}}"
+            if (ipa := re.search(r"\{\{Lautschrift\|([^}|]+)", line)):
+                cur["ipa"] = ipa.group(1).strip()
         elif line.startswith("{{Bedeutungen}}"):
             in_meanings, group = True, ""
         elif in_meanings:
@@ -224,28 +227,59 @@ SENSE_KINDS = {
 NAME_KINDS = {"Nachname", "Vorname", "Toponym", "Eigenname"}
 
 
-async def german_senses(lemma: str, pos: str, morph_gender: str = "") -> list[str]:
-    """German meanings of a German word from de.wiktionary ("(Substantiv) Gegenstand zum …"), at most 5,
-    for the word class spaCy found. Uses the page already fetched for the grammar line. [] if none/offline."""
-    if " " in lemma.strip():
-        return []
-    gender = SPACY_GENDER.get(morph_gender)
+async def _page_entries(lemma: str) -> list[dict]:
+    """Parsed entries for the lemma (or its other capitalisation if that page has none). [] if none/offline."""
     try:
         async with httpx.AsyncClient(timeout=6, headers=HTTP_HEADERS, follow_redirects=True) as client:
             entries = await _entries(client, lemma) or []
             if not any(e["senses"] for e in entries) and lemma[:1].islower() != lemma[:1].isupper():
                 alt = lemma.capitalize() if lemma[:1].islower() else lemma.lower()
                 entries = await _entries(client, alt) or []
+            return entries
     except httpx.HTTPError as ex:
-        log.warning("German meanings lookup failed: %s", ex)
+        log.warning("German Wiktionary lookup failed: %s", ex)
         return []
-    entries = [e for e in entries if e["senses"]]
+
+
+def _matching(entries: list[dict], pos: str, gender: str | None) -> tuple[list[dict], bool]:
+    """Entries for the word class spaCy found (and the gender in the sentence), and whether the word class
+    matched at all (else all entries are returned)."""
     wanted = SENSE_KINDS.get(pos, set())
     same = [e for e in entries if wanted & set(e["kinds"])]
     if pos == "NOUN":  # surnames are also tagged "Substantiv"; for an ordinary noun they're noise
         same = [e for e in same if not NAME_KINDS & set(e["kinds"])] or same
+    matched = bool(same)
     same = same or entries
     if gender:  # das Band / der Band / die Band
         same = [e for e in same if _first(e["params"], "Genus") in ("", gender)] or same
+    return same, matched
+
+
+async def german_senses(lemma: str, pos: str, morph_gender: str = "") -> list[str]:
+    """German meanings of a German word from de.wiktionary ("(Substantiv) Gegenstand zum …"), at most 5,
+    for the word class spaCy found. Uses the page already fetched for the grammar line. [] if none/offline."""
+    if " " in lemma.strip():
+        return []
+    entries = [e for e in await _page_entries(lemma) if e["senses"]]
+    same, _ = _matching(entries, pos, SPACY_GENDER.get(morph_gender))
     from .nlp import _select  # breadth-first over the entries, "(pos) definition", shortened
     return _select([(e["type"], e["senses"]) for e in same], "")
+
+
+async def german_info(lemma: str, pos: str, morph_gender: str = "") -> dict:
+    """Word class name ("Adjektiv"), IPA ("ˈɡlʏklɪç") and up to 3 German meanings without the word-class
+    prefix, from the same de.wiktionary page as the grammar line. Empty values if unknown/offline."""
+    out = {"wortart": "", "ipa": "", "senses": []}
+    if " " in lemma.strip():
+        return out
+    entries = [e for e in await _page_entries(lemma) if e["senses"] or e["ipa"]]
+    same, matched = _matching(entries, pos, SPACY_GENDER.get(morph_gender))
+    if not same:
+        return out
+    if matched:
+        out["wortart"] = same[0]["type"]
+    out["ipa"] = next((e["ipa"] for e in same if e["ipa"]), "")
+    from .nlp import _short
+    senses = [x for e in same for x in e["senses"]]
+    out["senses"] = [_short(x) for x in senses[:3]]
+    return out

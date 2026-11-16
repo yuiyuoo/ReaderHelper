@@ -363,10 +363,18 @@ def _check(r: httpx.Response) -> bool:
 Groups = list[tuple[str, list[str]]]
 
 
+# English pronunciation (IPA) seen in dictionaryapi.dev answers, by term – filled while fetching senses.
+_EN_IPA: dict[str, str] = {}
+
+
 async def _en_senses(client: httpx.AsyncClient, term: str) -> Groups:
     r = await _get(client, f"https://api.dictionaryapi.dev/api/v2/entries/en/{term}")
     if not _check(r):
         return []
+    for entry in r.json():
+        ipa = entry.get("phonetic") or next((p["text"] for p in entry.get("phonetics", []) if p.get("text")), "")
+        if ipa:
+            _EN_IPA.setdefault(term.lower(), ipa.strip("/[] "))
     return [
         (m.get("partOfSpeech", ""), [d["definition"] for d in m.get("definitions", []) if d.get("definition")])
         for entry in r.json()
@@ -408,6 +416,23 @@ async def fetch_expression_senses(lang: str, titles: list[str]) -> tuple[list[st
     except (httpx.HTTPError, ValueError, DictUnavailable) as e:
         log.warning("expression lookup failed: %s", e)
     return [], None
+
+
+# Word class shown in the popup when the dictionary doesn't name it.
+POS_LABELS = {
+    "de": {"NOUN": "Substantiv", "PROPN": "Eigenname", "VERB": "Verb", "AUX": "Hilfsverb", "ADJ": "Adjektiv",
+           "ADV": "Adverb", "ADP": "Präposition", "PRON": "Pronomen", "DET": "Artikel", "CCONJ": "Konjunktion",
+           "SCONJ": "Subjunktion", "NUM": "Numerale", "PART": "Partikel", "INTJ": "Interjektion"},
+    "en": {"NOUN": "noun", "PROPN": "proper noun", "VERB": "verb", "AUX": "auxiliary verb", "ADJ": "adjective",
+           "ADV": "adverb", "ADP": "preposition", "PRON": "pronoun", "DET": "determiner", "CCONJ": "conjunction",
+           "SCONJ": "conjunction", "NUM": "numeral", "PART": "particle", "INTJ": "interjection"},
+}
+
+
+async def english_ipa(lemma: str, word: str, pos: str) -> str:
+    """IPA of an English word ("ˈhæpi"), from the dictionary answer that is fetched for its senses anyway."""
+    await fetch_senses("en", lemma, word, pos)  # cached: the lookup itself makes the same call
+    return _EN_IPA.get(lemma.lower()) or _EN_IPA.get(word.lower(), "")
 
 
 # spaCy coarse POS -> part-of-speech names used by the dictionaries (lowercased).
