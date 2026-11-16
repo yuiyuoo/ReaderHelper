@@ -117,36 +117,40 @@ def put_cached(lang: str, lemma: str, sentence: str, variant: str, result: dict)
 
 
 def add_vocab(user_id: int, item: dict) -> dict:
-    """Insert a word, or update the same person's entry for the same lemma in the same sentence
-    with the same meaning language."""
+    """Insert a word, or update the same person's entry for the same lemma in the same sentence.
+    The meaning language doesn't make it a different entry: saving "mustern" first with the English
+    dictionary meaning and later with a German or Vietnamese one used to create two cards for one word."""
     target = item.get("target_lang", "vi")
     with _conn() as conn:
         existing = conn.execute(
-            "SELECT id FROM vocab WHERE user_id=? AND lang=? AND lemma=? AND sentence=? AND target_lang=?",
-            (user_id, item["lang"], item["lemma"], item["sentence"], target),
+            "SELECT id FROM vocab WHERE user_id=? AND lang=? AND lower(lemma)=lower(?) AND sentence=?"
+            " ORDER BY reps DESC, id LIMIT 1",
+            (user_id, item["lang"], item["lemma"], item["sentence"]),
         ).fetchone()
         if existing:
-            # Saving again refreshes the meaning; the review history is kept.
+            # Saving again refreshes the meaning (and its language); the review history is kept.
             conn.execute(
-                "UPDATE vocab SET word=?, translation_vi=?, gloss_vi=?, sentence_tr=?,"
+                "UPDATE vocab SET word=?, translation_vi=?, gloss_vi=?, target_lang=?, sentence_tr=?,"
                 " book_id=COALESCE(?, book_id), cfi=CASE WHEN ?='' THEN cfi ELSE ? END,"
                 " grammar=CASE WHEN ?='' THEN grammar ELSE ? END WHERE id=?",
-                (item["word"], item.get("translation_vi", ""), item.get("gloss_vi", ""),
+                (item["word"], item.get("translation_vi", ""), item.get("gloss_vi", ""), target,
                  item.get("sentence_tr", ""), item.get("book_id"), item.get("cfi", ""), item.get("cfi", ""),
                  item.get("grammar", ""), item.get("grammar", ""), existing["id"]),
             )
-            return get_vocab(user_id, existing["id"])
-        cur = conn.execute(
-            "INSERT INTO vocab (lang, word, lemma, sentence, translation_vi, gloss_vi, created_at, target_lang,"
-            " sentence_tr, book_id, cfi, user_id, grammar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                item["lang"], item["word"], item["lemma"], item["sentence"],
-                item.get("translation_vi", ""), item.get("gloss_vi", ""), _now(), target,
-                item.get("sentence_tr", ""), item.get("book_id"), item.get("cfi", ""), user_id,
-                item.get("grammar", ""),
-            ),
-        )
-    return get_vocab(user_id, cur.lastrowid)
+            vocab_id = existing["id"]
+        else:
+            vocab_id = conn.execute(
+                "INSERT INTO vocab (lang, word, lemma, sentence, translation_vi, gloss_vi, created_at, target_lang,"
+                " sentence_tr, book_id, cfi, user_id, grammar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    item["lang"], item["word"], item["lemma"], item["sentence"],
+                    item.get("translation_vi", ""), item.get("gloss_vi", ""), _now(), target,
+                    item.get("sentence_tr", ""), item.get("book_id"), item.get("cfi", ""), user_id,
+                    item.get("grammar", ""),
+                ),
+            ).lastrowid
+    # Read back after the with-block has committed (inside it, another connection still sees the old row).
+    return get_vocab(user_id, vocab_id)
 
 
 VOCAB_SELECT = "SELECT v.*, b.title AS book_title FROM vocab v LEFT JOIN books b ON b.id = v.book_id"
