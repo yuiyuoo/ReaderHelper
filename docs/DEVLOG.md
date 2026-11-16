@@ -1047,6 +1047,27 @@ so it looked unsaved and was looked up and saved a second time.
 the same sentence (en → de → vi) gives one entry with the last meaning, and each response shows the new state.
 *Files:* `backend/nlp.py`, `backend/db.py`, `tools/check_lemmas.py`
 
+### 65. Word class, IPA and German meanings in every popup (step 1 of a richer popup)
+**Request:** a popup like a learner's dictionary: word class, pronunciation, German definition, Vietnamese,
+explanation in the sentence, word family. Step 1 = everything that needs no AI.
+**Fix:**
+- `grammar._parse` also reads `:{{IPA}} {{Lautschrift|…}}` per part-of-speech entry, so homonyms keep their own
+  pronunciation (*das Band* /bant/, *die Band* /bɛnt/). `german_info()` picks the entries like `german_senses`
+  (word class from spaCy, gender from the sentence; shared `_matching`) and returns Wortart, IPA and up to 3
+  plain German meanings.
+- English: the IPA comes from the dictionaryapi.dev answer that is fetched for the senses anyway (`_EN_IPA`).
+- `/lookup` runs one `_word_extras` task (grammar line, `pos_label`, `ipa`, `definition_de`) alongside the
+  dictionary; the grammar request fills the page cache first, so the German page is fetched once. It is added
+  to cached AI answers too and never breaks a lookup. `definition_de` only when the meaning language isn't
+  German (then the main definitions are German already, #55). Not for expressions.
+- Popup: a line *Substantiv · /ˈkɔpf.ʃmɛʁts/* under the word, a **Deutsch** section before the AI parts.
+- Found on the way: long words ("Kopfschmerzen ← Kopfschmerz") pushed × out and gave the popup a horizontal
+  scrollbar. The header now wraps, × sits fixed in the top right corner, no horizontal overflow.
+*Tested:* `/lookup` quick step: *glücklich* (Adjektiv, ˈɡlʏklɪç, 3 German meanings), *die Band* (bɛnt),
+*fing* (Verb, IPA of anfangen), *happy* (adjective, ˈhæpiː), expression → no extras; headless Edge screenshots.
+*Files:* `backend/grammar.py`, `backend/nlp.py`, `backend/main.py`, `frontend/reader.js`, `frontend/style.css`,
+`README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |

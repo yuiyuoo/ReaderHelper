@@ -164,6 +164,11 @@ can open the app at all.
   **Choose the meaning yourself:** open **All senses** and click the right one. Without an AI answer it becomes
   the definition (and the note when you save); with an AI answer the AI is asked again for exactly that
   meaning, and the new answer is remembered for this word in this sentence.
+- **Word class and pronunciation:** under the word: *Adjektiv · /ˈɡlʏklɪç/* (German: word class and IPA from
+  the German Wiktionary, matching the gender in the sentence – *die Band* /bɛnt/; English: IPA from the
+  dictionary). The IPA is that of the base form shown.
+- **German meanings** of German words appear in a **Deutsch** section (up to 3) even with meanings in Vietnamese or
+  English – at once, without the AI. With **DE** selected they are the main definitions instead.
 - **Grammar (German words):** under the word the popover shows
   - nouns: article and plural, with the article coloured by gender (**der** blue, **die** red, **das** green):
     *der Schlüssel, die Schlüssel, des Schlüssels*. Words with several genders (*der/die/das Band*) use the
