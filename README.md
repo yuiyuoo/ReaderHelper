@@ -158,6 +158,9 @@ can open the app at all.
   Edit). **✨ Ask AI** adds the meaning in this sentence, an explanation and a translation of the whole
   sentence (15–25 s; the first time also loads the model). AI answers you already got come back instantly
   from the cache. **Selected text** (a phrase or sentences) always uses the AI (see below).
+  **Already saved?** The button shows **★ Saved**; click it and confirm **Remove from my words?** to unsave
+  the word (all sentences it was saved from; its highlights go away). After **Ask AI**, **↻ Update** stores the
+  new meaning instead.
   **Choose the meaning yourself:** open **All senses** and click the right one. Without an AI answer it becomes
   the definition (and the note when you save); with an AI answer the AI is asked again for exactly that
   meaning, and the new answer is remembered for this word in this sentence.

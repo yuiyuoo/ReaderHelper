@@ -1011,6 +1011,19 @@ read next – so you couldn't read on during the 15–25 s the AI takes.
 phone bottom/top sheet; in all four cases the popup doesn't cover the word.
 *Files:* `frontend/reader.js`, `frontend/style.css`, `README.md`
 
+### 63. Unsave a word from the popup
+**Problem:** A saved word could only be removed on the Vocabulary page; in the book the popup always offered
+"Save word", even for a word you had saved.
+**Fix:** the reader keeps the full list of your saved entries. If the word in the popup is saved (same language
+and base form, so also an expression like *darauf bestehen*), the button is **★ Saved**. One click turns it into
+**Remove from my words?** (red, back to normal after 4 s), a second click deletes all entries of that base form
+(the number of sentences is shown if more than one), refreshes highlights and count, and says so at the bottom.
+With an AI answer shown, **↻ Update** saves the new meaning (same as saving again before). After saving, the popup
+switches to **★ Saved** at once. Removing also removes the review history; saving again starts a new card.
+*Tested:* headless Edge: tap *herunter* (herunterfahren) → ★ Saved → Remove? → removed (225 → 224 words, 2
+highlights fewer, message) → button "Save word" → save again → ★ Saved, 225 words, highlights back.
+*Files:* `frontend/reader.js`, `frontend/style.css`, `README.md`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
