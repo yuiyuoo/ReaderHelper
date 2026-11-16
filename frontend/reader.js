@@ -33,6 +33,7 @@
   let savedWords = new Set();   // lowercase spellings of saved words (fallback highlighting)
   let savedPhrases = new Set(); // saved entries of several words, highlighted by spelling
   let savedInfo = new Map();    // lowercase base form / spelling -> saved entry (meaning shown on hover)
+  let savedItems = [];          // all saved entries of this person (for "★ Saved" / remove in the popup)
   let currentTarget = LABELS[store.get("target")] ? store.get("target") : "vi";
   let autoplay = store.get("autoplay") === "1";
   let fontPct = Math.min(FONT_MAX, Math.max(FONT_MIN, Number(store.get("fontSize")) || 100));
@@ -1072,6 +1073,7 @@
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   function renderPopover(state, phase) {
+    state.phase = phase;
     const d = state.data;
     const L = LABELS[d?.target_lang] || LABELS[target()];
     const lemma = d?.lemma && d.lemma.toLowerCase() !== state.word.toLowerCase()
@@ -1133,12 +1135,12 @@
       html += `<div class="section sentence">${esc(d.sentence || state.sentence)}` +
         (d.sentence_tr ? `<div class="sentence-tr">${esc(d.sentence_tr)}</div>` : "") + `</div>`;
       if (phase === "dict") {
-        html += `<div class="actions"><button class="save" data-act="save">Save ${ex ? "expression" : "word"}</button>
+        html += `<div class="actions">${saveButton(state)}
           <button data-act="ask" title="Get the meaning in this sentence from the AI (takes a while)">✨ Ask AI</button>
           <button data-act="add" title="Add another word of this sentence (for expressions like “in Frage stellen”)">+ Add word</button></div>`;
       }
       if (phase === "done") {
-        html += `<div class="actions"><button class="save" data-act="save">Save ${ex ? "expression" : "word"}</button>
+        html += `<div class="actions">${saveButton(state)}
           <button data-act="retry" title="Ignore the cached answer and ask the model again">↻ Ask again</button>
           <button data-act="add" title="Add another word of this sentence (for expressions like “in Frage stellen”)">+ Add word</button>
           ${d.cached ? '<span class="sense">cached</span>' : ""}</div>`;
@@ -1162,6 +1164,8 @@
       if (act === "close") closePopover();
       if (act === "speak") speak(state.word, state.lang || "en");
       if (act === "save") saveWord(state, ev.target);
+      if (act === "unsave") { state.confirmUnsave = true; renderPopover(state, phase); armUnsave(state); }
+      if (act === "unsave-confirm") unsaveWord(state);
       const again = { cfi: state.cfi, parts: state.parts, single: state.single, ask: state.ask };
       if (act === "retry") lookup(state.word, state.sentence, state.anchor, { ...again, refresh: true, ask: true });
       if (act === "ask") lookup(state.word, state.sentence, state.anchor, { ...again, ask: true });
@@ -1275,15 +1279,65 @@
       btn.textContent = "Saved ✓";
       await loadSavedWords();  // refresh the saved list (for highlighting) and the vocabulary count
       rendition?.getContents().forEach(highlightSaved);
+      if (!els.popover.hidden && state.phase) renderPopover(state, state.phase);  // now "★ Saved"
     } catch {
       btn.disabled = false;
       btn.textContent = "Save failed – retry";
     }
   }
 
+  /** Saved entries for the word in the popup: same language and base form (all sentences it was saved from). */
+  function savedEntries(d) {
+    if (!d?.lemma) return [];
+    const lemma = d.lemma.toLowerCase();
+    return savedItems.filter((v) => v.lang === d.lang && v.lemma.toLowerCase() === lemma);
+  }
+
+  /** "Save word", or "★ Saved" (click: remove) when this word is already in your words. */
+  function saveButton(state) {
+    const d = state.data, n = savedEntries(d).length;
+    const what = d.expression ? "expression" : "word";
+    if (!n) return `<button class="save" data-act="save">Save ${what}</button>`;
+    if (state.confirmUnsave) {
+      return `<button class="danger" data-act="unsave-confirm">Remove from my words${n > 1 ? ` (${n} sentences)` : ""}?</button>`;
+    }
+    // Saving again in this sentence updates the meaning (e.g. after Ask AI), so offer that too.
+    const update = state.phase === "done" && (d.translation_vi || d.gloss_vi)
+      ? `<button data-act="save" title="Save this meaning (replaces the saved one for this sentence)">↻ Update</button>` : "";
+    return `<button class="save saved" data-act="unsave" title="In your words – click to remove">★ Saved</button>${update}`;
+  }
+
+  // The "Remove?" question goes away by itself after a few seconds.
+  function armUnsave(state) {
+    clearTimeout(state.unsaveTimer);
+    state.unsaveTimer = setTimeout(() => {
+      if (!state.confirmUnsave) return;
+      state.confirmUnsave = false;
+      if (!els.popover.hidden && state.phase) renderPopover(state, state.phase);
+    }, 4000);
+  }
+
+  async function unsaveWord(state) {
+    const entries = savedEntries(state.data);
+    state.confirmUnsave = false;
+    try {
+      for (const v of entries) {
+        const r = await fetch(`/api/vocab/${v.id}`, { method: "DELETE" });
+        if (!r.ok && r.status !== 404) throw new Error();
+      }
+      await loadSavedWords();
+      rendition?.getContents().forEach(highlightSaved);
+      setStatus(`Removed “${state.data.lemma}” from your words.`);
+    } catch {
+      setStatus("Could not remove the word. Is the server running?");
+    }
+    if (!els.popover.hidden && state.phase) renderPopover(state, state.phase);
+  }
+
   async function loadSavedWords() {
     try {
       const items = await (await fetch("/api/vocab")).json();
+      savedItems = items;
       savedWords = new Set(items.map((v) => v.word.toLowerCase()));
       // Phrases are matched by spelling; expressions with gaps ("stellte … in Frage") by the server.
       savedPhrases = new Set(items.filter((v) => v.word.trim().includes(" ") && !v.word.includes("…"))

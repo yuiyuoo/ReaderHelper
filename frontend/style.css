@@ -535,3 +535,7 @@ button.progress:hover { background: var(--hover); color: var(--text); }
   .popover.sheet-top .actions { bottom: -18px; margin-bottom: -18px; padding-bottom: 10px; }
 }
 @keyframes sheet-down { from { transform: translateY(-100%); } to { transform: none; } }
+
+/* Popup: word already saved ("★ Saved", click to remove) */
+.popover .actions button.saved { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.popover .actions button.danger { color: var(--danger); border-color: var(--danger-border); }
