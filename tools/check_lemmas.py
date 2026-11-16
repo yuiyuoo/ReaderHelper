@@ -16,6 +16,8 @@ from backend import nlp
 cases = [
     # separated, many different particles and verbs
     ("Chiaras Freundlichkeit milderte den Widerwillen.", "milderte", "mildern"),  # spaCy: "milderen"
+    ("Julia trat einen Schritt zurück und musterte Laura.", "musterte", "mustern"),  # spaCy: ADJA "mustert"
+    ("Sie trug die rote Jacke.", "rote", "rot"),
     ("Sie lächelte und wanderte weiter.", "lächelte", "lächeln"),
     ("Der Zug kam pünktlich in Berlin an.", "kam", "ankommen"),
     ("Wir kauften am Samstag im Supermarkt ein.", "kauften", "einkaufen"),

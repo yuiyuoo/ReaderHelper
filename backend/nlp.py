@@ -73,6 +73,21 @@ def _base_form(lang: str, tok) -> str:
         short = lemma[:-2] + "n"
         if simplemma.is_known(short, lang="de"):
             return short
+    # A German verb's base form ends in -n (mustern, gehen, sein, tun). spaCy sometimes returns an inflected
+    # form ("musterte" -> "mustert"); that passes the known-word check below because it *is* a word.
+    # The small model also takes some past-tense verbs for adjectives ("… und musterte Laura": ADJA, lemma
+    # "mustert"). If spaCy's lemma isn't a base form itself and both lemmatizers lead to the same verb, use it.
+    # Real adjectives ("rote" -> "rot") are base forms already; participles ("geliebte") are left alone.
+    if (lemma.endswith("t") and tok.text.lower().endswith(("te", "ten", "test", "tet"))
+            and not lemma.lower().startswith("ge")):
+        base = simplemma.lemmatize(lemma, lang="de")
+        if (base != lemma and base.endswith("n") and simplemma.lemmatize(tok.text, lang="de") == base
+                and simplemma.is_known(base, lang="de")):
+            return base
+    if tok.pos_ in ("VERB", "AUX") and not lemma.endswith("n"):
+        alt = simplemma.lemmatize(tok.text, lang="de")
+        if alt and alt.endswith("n") and simplemma.is_known(alt, lang="de"):
+            return alt
     # Ask simplemma when spaCy left the word unchanged, or produced something that isn't a German word
     # (spaCy guessed "fortwarfsen" for "fortwarfst"; simplemma knows "fortwerfen").
     if lemma.lower() == tok.text.lower() or not simplemma.is_known(lemma, lang="de"):
