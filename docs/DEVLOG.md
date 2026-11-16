@@ -1024,6 +1024,29 @@ switches to **★ Saved** at once. Removing also removes the review history; sav
 highlights fewer, message) → button "Save word" → save again → ★ Saved, 225 words, highlights back.
 *Files:* `frontend/reader.js`, `frontend/style.css`, `README.md`
 
+### 64. "mustern" saved twice – because it wasn't highlighted
+**Problem:** *mustern* was in the vocabulary twice (same sentence). It wasn't highlighted where it came up again,
+so it looked unsaved and was looked up and saved a second time.
+**Causes and fixes:**
+- **Not highlighted:** in "Julia trat einen Schritt zurück und **musterte** Laura" the small spaCy model takes
+  *musterte* for an adjective (ADJA) with the lemma "mustert". The known-word check accepted that, because
+  *mustert* is a word – an inflected one. Two narrow rules in `_base_form`: (a) a German verb's base form ends
+  in *-n*, else simplemma's (*mustern, gehen, sein, tun*); (b) a *-te/-ten* word whose spaCy lemma ends in *-t*
+  and is not itself a base form, while both lemmatizers lead to the same verb, gets that verb. Real adjectives
+  (*rote → rot*, *leichte → leicht*) are base forms already; *ge-* participles (*geliebte*) are left alone.
+  Two new cases in `check_lemmas.py` (40/41).
+- **Two entries:** the duplicate check compared the meaning language too: first saved with the English
+  dictionary meaning ("en"), later with the German one ("de") → a second card. Now an entry is the same person +
+  language + base form + sentence; saving again updates its meaning *and* meaning language and keeps the review
+  history. (The new **↻ Update** button from #63 would otherwise have created duplicates as well.)
+- **Found on the way:** `add_vocab` read the row back *inside* the transaction through another connection, so
+  after an update the response still showed the old meaning (the database itself was right). Now it reads after
+  the commit.
+- Existing duplicates in the database (3 pairs) are not merged automatically.
+*Tested:* the chapter-4 paragraph with its line breaks now highlights *musterte*; saving one word three times in
+the same sentence (en → de → vi) gives one entry with the last meaning, and each response shows the new state.
+*Files:* `backend/nlp.py`, `backend/db.py`, `tools/check_lemmas.py`
+
 ## Where the app differs from the original spec (CLAUDE.md)
 
 | Spec | Now | Why |
