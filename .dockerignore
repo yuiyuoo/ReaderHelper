@@ -1,0 +1,13 @@
+.venv/
+.git/
+.github/
+.claude/
+**/__pycache__/
+.env
+app.db
+books/
+covers/
+docker-data/
+tests/
+tools/
+docs/

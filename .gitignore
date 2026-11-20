@@ -4,3 +4,6 @@ __pycache__/
 app.db
 books/*.epub
 covers/
+docker-data/
+.pytest_cache/
+.ruff_cache/

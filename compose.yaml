@@ -1,0 +1,30 @@
+# docker compose up --build            -> app only, uses the Ollama already running on this PC
+# OLLAMA_BASE_URL=http://ollama:11434 docker compose --profile ollama up --build
+#                                      -> also starts Ollama in a container
+#                                         (then once: docker compose exec ollama ollama pull qwen3:4b)
+services:
+  app:
+    build: .
+    image: readerhelper
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
+    volumes:
+      - ./docker-data:/data   # app.db, books/, covers/
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # needed on Linux; Docker Desktop has it already
+    restart: unless-stopped
+
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:0.12.6
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "11434:11434"
+
+volumes:
+  ollama-models:
