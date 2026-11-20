@@ -1,10 +1,14 @@
 """SQLite storage: lookup cache + saved vocabulary."""
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "app.db"
+# DATA_DIR holds app.db, books/ and covers/. Default: the project folder; Docker sets it to a volume.
+DATA_DIR = Path(os.getenv("DATA_DIR") or Path(__file__).resolve().parent.parent)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = DATA_DIR / "app.db"
 
 
 def _conn() -> sqlite3.Connection:
