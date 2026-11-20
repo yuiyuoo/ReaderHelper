@@ -1,11 +1,15 @@
 # ReaderHelper
 
+[![CI](https://github.com/yuiyuoo/ReaderHelper/actions/workflows/ci.yml/badge.svg)](https://github.com/yuiyuoo/ReaderHelper/actions/workflows/ci.yml)
+
 A local, single-user EPUB reader for learning English and German. Click any word to get its
 pronunciation, lemma, a short dictionary definition, a Vietnamese translation, and a Vietnamese
 explanation of what the word means **in that sentence**. Save words and export them to Anki.
 
 The Vietnamese part runs on a local model through [Ollama](https://ollama.com), so there's no API key and nothing to pay for.
 Only the clicked word and its sentence are sent to the model, never the book.
+
+![Demo: click "bank" in Alice in Wonderland, the AI picks the riverbank sense (bờ sông) for this sentence; German words show base form and grammar; saved words go to the vocabulary list and spaced-repetition review](docs/demo.gif)
 
 ## Setup
 
@@ -258,6 +262,43 @@ switch `OLLAMA_MODEL`, words are therefore looked up fresh instead of showing th
 Only successful model answers are cached. **↻ Ask again** in the popover skips the cache.
 
 **Vocabulary:** saving the same word in the same sentence again updates the entry instead of duplicating it.
+
+## Run with Docker
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:8000. The container uses the Ollama that already runs on your PC
+(`host.docker.internal:11434`). Books, covers and `app.db` are kept in `docker-data/` next to the project,
+so they survive rebuilds. To bring your existing library along, copy `app.db`, `books/` and `covers/` into
+`docker-data/` before the first start.
+
+To run Ollama in a container as well:
+
+```bash
+OLLAMA_BASE_URL=http://ollama:11434 docker compose --profile ollama up --build
+docker compose exec ollama ollama pull qwen3:4b    # once
+```
+
+Every push to `main` also publishes the image to `ghcr.io/yuiyuoo/readerhelper` (see CI below).
+
+## Tests and CI
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q                          # 39 tests, ~10 s, no Ollama or internet needed
+ruff check backend tests tools
+```
+
+The tests use a temporary data folder (`DATA_DIR`), so they never touch your real `app.db`. They cover the
+spaced-repetition schedule, parsing of messy model output (`<think>` blocks, code fences, Chinese characters,
+wrong sense numbers), lemmas and language detection with spaCy, and the HTTP API (profiles, vocabulary,
+reviews, Anki export, path traversal).
+
+GitHub Actions (`.github/workflows/ci.yml`) runs lint and tests on every push and pull request, then builds
+the Docker image, starts it and checks that it answers. On `main` the image is pushed to GitHub Container
+Registry.
 
 ## Checking translation quality
 
