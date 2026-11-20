@@ -25,9 +25,9 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("readerhelper")
 
 FRONTEND = ROOT / "frontend"
-BOOKS = ROOT / "books"
+BOOKS = db.DATA_DIR / "books"
 BOOKS.mkdir(exist_ok=True)
-COVERS = ROOT / "covers"  # cover pictures (from the EPUB or uploaded)
+COVERS = db.DATA_DIR / "covers"  # cover pictures (from the EPUB or uploaded)
 COVERS.mkdir(exist_ok=True)
 
 app = FastAPI(title="ReaderHelper")
